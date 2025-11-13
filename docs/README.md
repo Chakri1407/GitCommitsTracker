@@ -42,21 +42,21 @@ A powerful Node.js tool to track developer contributions across GitHub repositor
 npm install
 ```
 
-### 2. Setup Configuration
+### 2. Setup Environment Variables
 ```bash
-# Copy example config
-copy config\Config.example.js config\Config.js
+# Copy example environment file
+copy .env.example .env
 
-# Edit config with your details
-notepad config\Config.js
+# Edit with your details
+notepad .env
 ```
 
 ### 3. Add Your GitHub Token
 Get your token from: https://github.com/settings/tokens
 
-Update `config/Config.js`:
-```javascript
-token: 'ghp_your_github_token_here'
+Update `.env`:
+```env
+GITHUB_TOKEN=ghp_your_github_token_here
 ```
 
 ### 4. Run Your First Report
@@ -87,9 +87,9 @@ That's it! 🎉
    npm install
    ```
 
-3. **Create configuration**
+3. **Create environment file**
    ```bash
-   copy config\Config.example.js config\Config.js
+   copy .env.example .env
    ```
 
 4. **Get GitHub Token**
@@ -100,17 +100,17 @@ That's it! 🎉
    - Click "Generate token"
    - Copy the token
 
-5. **Update configuration**
-   Edit `config/Config.js`:
-   ```javascript
-   module.exports = {
-       github: {
-           organization: 'SoluLab',
-           repository: 'your-main-repo',
-           repositories: null,  // Auto-discovers all repos
-           token: 'ghp_your_token_here'
-       }
-   };
+5. **Update environment file**
+   Edit `.env`:
+   ```env
+   GITHUB_ORG=SoluLab
+   GITHUB_REPO=your-main-repo
+   GITHUB_TOKEN=ghp_your_token_here
+   DEFAULT_PERIOD=all
+   LEADERBOARD_SIZE=10
+   EXPORT_JSON=true
+   SHOW_INACTIVE=true
+   SHOW_BREAKDOWN=true
    ```
 
 6. **Test installation**
@@ -122,46 +122,68 @@ That's it! 🎉
 
 ## ⚙️ Configuration
 
-### Basic Configuration
+### Environment Variables (Recommended)
 
-**config/Config.js:**
-```javascript
-module.exports = {
-    github: {
-        organization: 'SoluLab',        // Your GitHub organization
-        repository: 'rentzi-admin',     // Main repo (for single-repo reports)
-        repositories: null,              // null = auto-discover all repos
-        token: 'ghp_your_token_here'    // Your GitHub token
-    },
-    
-    reports: {
-        defaultPeriod: 'all',           // 'daily', 'weekly', 'monthly', 'all'
-        leaderboardSize: 10,            // Top N developers
-        exportToJson: true,             // Export to JSON files
-        showInactive: true,             // Show inactive developers
-        showRepositoryBreakdown: true   // Show per-repo stats
-    }
-};
+All configuration is now managed through the `.env` file for better security.
+
+**.env file:**
+```env
+# ============================================================================
+# GitHub Configuration
+# ============================================================================
+
+# GitHub Organization Name (case-sensitive)
+GITHUB_ORG=SoluLab
+
+# Single Repository (for single-repo reports)
+GITHUB_REPO=rentzi-admin
+
+# Multiple Repositories (for multi-repo reports)
+# Leave empty to auto-discover, or provide comma-separated list
+# GITHUB_REPOS=repo1,repo2,repo3
+
+# GitHub Personal Access Token (REQUIRED)
+GITHUB_TOKEN=ghp_your_token_here
+
+# ============================================================================
+# Report Configuration
+# ============================================================================
+
+# Default report period: daily, weekly, monthly, or all
+DEFAULT_PERIOD=all
+
+# Number of top developers to show (1-100)
+LEADERBOARD_SIZE=10
+
+# Export reports to JSON files
+EXPORT_JSON=true
+
+# Show inactive developers (single repo only)
+SHOW_INACTIVE=true
+
+# Show repository breakdown (multi repo only)
+SHOW_BREAKDOWN=true
 ```
 
 ### Repository Options
 
-#### Option 1: Auto-Discover (Recommended)
-```javascript
-organization: 'SoluLab',
-repositories: null,  // Finds all SoluLab repos you have access to
+#### Option 1: Auto-Discover (Default - Recommended)
+```env
+GITHUB_ORG=SoluLab
+# Don't set GITHUB_REPOS - it will auto-discover all SoluLab repos
 ```
 
 #### Option 2: All Organizations
-```javascript
-organization: null,
-repositories: null,  // Finds all repos from all organizations
+```env
+GITHUB_ORG=
+# Leave empty to discover repos from all organizations
 ```
 
 #### Option 3: Specific Repositories
-```javascript
-organization: 'SoluLab',
-repositories: ['repo1', 'repo2', 'repo3'],  // Only these repos
+```env
+GITHUB_ORG=SoluLab
+GITHUB_REPOS=rentzy-be-user,rentzy-be-propertyowner,rentzi-admin
+# Comma-separated list of specific repos
 ```
 
 ---
@@ -300,98 +322,109 @@ Net Lines Changed: 11,450
 
 ### Report Settings
 
-```javascript
-reports: {
-    // Default period when running 'npm start'
-    defaultPeriod: 'all',           // 'daily', 'weekly', 'monthly', 'all'
-    
-    // Number of top contributors to show
-    leaderboardSize: 10,            // 1-100
-    
-    // Export reports to JSON files
-    exportToJson: true,             // true/false
-    
-    // Show inactive developers report (single repo only)
-    showInactive: true,             // true/false
-    
-    // Show breakdown by repository (multi repo only)
-    showRepositoryBreakdown: true   // true/false
-}
+Edit your `.env` file:
+
+```env
+# Default period when running 'npm start'
+DEFAULT_PERIOD=all              # Options: daily, weekly, monthly, all
+
+# Number of top contributors to show
+LEADERBOARD_SIZE=10             # Range: 1-100
+
+# Export reports to JSON files
+EXPORT_JSON=true                # Options: true, false
+
+# Show inactive developers report (single repo only)
+SHOW_INACTIVE=true              # Options: true, false
+
+# Show breakdown by repository (multi repo only)
+SHOW_BREAKDOWN=true             # Options: true, false
 ```
 
 ### GitHub Settings
 
-```javascript
-github: {
-    // Organization to filter (or null for all)
-    organization: 'SoluLab',
-    
-    // Single repository for RunReport.js
-    repository: 'rentzi-admin',
-    
-    // Multiple repositories or null for auto-discover
-    repositories: null,
-    
-    // GitHub Personal Access Token
-    token: 'ghp_your_token_here'
-}
+```env
+# Organization to filter (or leave empty for all)
+GITHUB_ORG=SoluLab
+
+# Single repository for RunReport.js
+GITHUB_REPO=rentzi-admin
+
+# Multiple repositories (comma-separated) or leave empty for auto-discover
+GITHUB_REPOS=
+
+# GitHub Personal Access Token
+GITHUB_TOKEN=ghp_your_token_here
 ```
 
 ---
 
 ## 🔒 Security Best Practices
 
-### DO NOT Commit Your Token
+### Using Environment Variables (Recommended)
 
-**Bad:**
-```javascript
-token: 'ghp_actual_token_here'  // ❌ In Config.js (committed to git)
-```
+The project now uses `.env` files for all configuration, which keeps your token secure.
 
-**Good:**
-```javascript
-// Option 1: Environment Variable
-token: process.env.GITHUB_TOKEN
+**Setup:**
 
-// Option 2: Separate Secrets File
-const secrets = require('./secrets.js');
-token: secrets.GITHUB_TOKEN
-```
+1. **Create `.env` file:**
+   ```bash
+   copy .env.example .env
+   ```
 
-### Setup with Environment Variables
+2. **Add your token:**
+   ```env
+   GITHUB_TOKEN=ghp_your_token_here
+   ```
 
-**1. Create `.env` file:**
-```env
-GITHUB_TOKEN=ghp_your_token_here
-```
+3. **Verify `.gitignore`:**
+   Make sure `.env` is listed (it already is by default):
+   ```
+   .env
+   .env.local
+   .env.production
+   ```
 
-**2. Add to `.gitignore`:**
-```
-.env
-config/secrets.js
-```
+### What Gets Committed to Git
 
-**3. Update Config.js:**
-```javascript
-require('dotenv').config();
+✅ **Safe to commit:**
+- `.env.example` - Template with no real secrets
+- `config/Config.js` - Reads from environment variables
+- `config/Config.example.js` - Configuration template
 
-module.exports = {
-    github: {
-        token: process.env.GITHUB_TOKEN
-    }
-};
-```
+❌ **NEVER commit:**
+- `.env` - Contains your actual token
+- Any file with real tokens or secrets
 
 ### Token Best Practices
 
 - ✅ Use tokens with minimum required permissions (`repo` scope only)
 - ✅ Set expiration date (90 days recommended)
 - ✅ Rotate tokens regularly
-- ✅ Store in environment variables or secrets manager
-- ✅ Never commit tokens to git
+- ✅ Store in `.env` file (never hardcode)
+- ✅ Keep `.env` in `.gitignore`
 - ❌ Don't share tokens in Slack/email
 - ❌ Don't use tokens without expiration
-- ❌ Don't commit Config.js with real tokens
+- ❌ Don't commit `.env` to git
+
+### Environment Variables Reference
+
+```env
+# Required
+GITHUB_TOKEN=ghp_xxxxx          # Your GitHub Personal Access Token
+
+# Organization settings
+GITHUB_ORG=SoluLab              # Filter by organization (or leave empty)
+GITHUB_REPO=rentzi-admin        # Default repo for single-repo reports
+GITHUB_REPOS=                   # Specific repos (comma-separated) or empty for auto-discover
+
+# Report settings
+DEFAULT_PERIOD=all              # daily, weekly, monthly, or all
+LEADERBOARD_SIZE=10             # Number of top developers to show
+EXPORT_JSON=true                # Export to JSON files
+SHOW_INACTIVE=true              # Show inactive developers
+SHOW_BREAKDOWN=true             # Show repository breakdown
+```
 
 ---
 
@@ -501,8 +534,8 @@ GithubCommitScript/
 │   └── RunMultiRepoReport.js          # Multi repo runner
 │
 ├── config/                             # Configuration
-│   ├── Config.js                      # Your config (gitignored)
-│   └── Config.example.js              # Config template
+│   ├── Config.js                      # Reads from .env
+│   └── Config.example.js              # Config template (optional)
 │
 ├── reports/                            # Generated reports
 │   ├── daily/                         # Daily reports
@@ -513,8 +546,11 @@ GithubCommitScript/
 │
 ├── docs/                               # Documentation
 │   ├── README.md                      # This file
-│   └── Quickstart.md                  # Quick start guide
+│   ├── Quickstart.md                  # Quick start guide
+│   └── TROUBLESHOOTING.md             # Problem solving guide
 │
+├── .env                                # Your secrets (NOT committed)
+├── .env.example                        # Template (safe to commit)
 ├── .gitignore                          # Git ignore rules
 ├── package.json                        # Node.js configuration
 └── package-lock.json                   # Dependency lock file
@@ -551,39 +587,39 @@ This includes:
 
 ### Change Leaderboard Size
 
-```javascript
-reports: {
-    leaderboardSize: 20  // Show top 20 instead of 10
-}
+```env
+# In .env file
+LEADERBOARD_SIZE=20  # Show top 20 instead of 10
 ```
 
 ### Disable JSON Export
 
-```javascript
-reports: {
-    exportToJson: false
-}
+```env
+# In .env file
+EXPORT_JSON=false
 ```
 
 ### Change Default Period
 
-```javascript
-reports: {
-    defaultPeriod: 'weekly'  // npm start will run weekly report
-}
+```env
+# In .env file
+DEFAULT_PERIOD=weekly  # npm start will run weekly report
 ```
 
 ### Track Specific Repositories Only
 
-```javascript
-github: {
-    organization: 'SoluLab',
-    repositories: [
-        'rentzy-be-user',
-        'rentzy-be-propertyowner',
-        'rentzi-admin'
-    ]
-}
+```env
+# In .env file
+GITHUB_ORG=SoluLab
+GITHUB_REPOS=rentzy-be-user,rentzy-be-propertyowner,rentzi-admin
+```
+
+### Track All Organizations
+
+```env
+# In .env file
+GITHUB_ORG=
+# Leave empty to track repos from all organizations you have access to
 ```
 
 ---
@@ -657,4 +693,4 @@ Built for SoluLab development team to track and celebrate developer contribution
 
 ---
 
-**Happy Tracking! 📊**
+**Happy Tracking! 📊** 

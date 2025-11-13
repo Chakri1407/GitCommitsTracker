@@ -11,8 +11,8 @@ Get started with GitHub Developer Contribution Tracker in 5 minutes!
 npm install
 
 # 2. Setup
-copy config\Config.example.js config\Config.js
-notepad config\Config.js
+copy .env.example .env
+notepad .env
 # Add your GitHub token
 
 # 3. Run
@@ -53,38 +53,39 @@ npm install
 
 ---
 
-### Step 3: Create Configuration (1 minute)
+### Step 3: Create Environment File (1 minute)
 
 ```bash
-# Copy example config
-copy config\Config.example.js config\Config.js
+# Copy example environment file
+copy .env.example .env
 
 # Open in editor
-notepad config\Config.js
+notepad .env
 ```
 
 **Update these values:**
 
-```javascript
-module.exports = {
-    github: {
-        organization: 'SoluLab',           // Your organization
-        repository: 'rentzi-admin',        // Your main repo
-        repositories: null,                 // Auto-discovers all repos
-        token: 'ghp_paste_your_token_here' // ← Paste token here
-    },
-    
-    reports: {
-        defaultPeriod: 'all',
-        leaderboardSize: 10,
-        exportToJson: true,
-        showInactive: true,
-        showRepositoryBreakdown: true
-    }
-};
+```env
+# GitHub Organization (case-sensitive)
+GITHUB_ORG=SoluLab
+
+# Single repository for single-repo reports
+GITHUB_REPO=rentzi-admin
+
+# GitHub Personal Access Token (paste your token here)
+GITHUB_TOKEN=ghp_paste_your_token_here
+
+# Report settings
+DEFAULT_PERIOD=all
+LEADERBOARD_SIZE=10
+EXPORT_JSON=true
+SHOW_INACTIVE=true
+SHOW_BREAKDOWN=true
 ```
 
 **Save and close** the file.
+
+**Security Note:** The `.env` file is automatically excluded from git (in `.gitignore`), so your token stays private! 🔒
 
 ---
 
@@ -179,29 +180,28 @@ reports/
 
 ## 🎨 Quick Configuration Tips
 
-### Track All SoluLab Repos (Recommended)
-```javascript
-organization: 'SoluLab',
-repositories: null,  // Auto-discovers all
-```
+### Track All SoluLab Repos (Default - Recommended)
+Your `.env` file is already set up for this! Just leave it as is.
 
 ### Track All Repos (All Organizations)
-```javascript
-organization: null,
-repositories: null,
+```env
+# In .env file
+GITHUB_ORG=
+# Leave GITHUB_ORG empty to discover repos from all organizations
 ```
 
 ### Track Specific Repos Only
-```javascript
-organization: 'SoluLab',
-repositories: ['rentzy-be-user', 'rentzi-admin'],
+```env
+# In .env file
+GITHUB_REPOS=rentzy-be-user,rentzi-admin,EcoYield-energy-be
+# Comma-separated list of specific repositories
 ```
 
 ### Change Default Command
-```javascript
-reports: {
-    defaultPeriod: 'weekly'  // npm start will run weekly
-}
+```env
+# In .env file
+DEFAULT_PERIOD=weekly
+# Now 'npm start' will run weekly reports
 ```
 
 ---
@@ -272,19 +272,32 @@ npm install
 
 ---
 
-### Issue: Config not found
+### Issue: "GITHUB_TOKEN not found"
 
 **Error message:**
 ```
-Error: config.js not found!
+⚠️  ERROR: GITHUB_TOKEN not found in environment variables!
 ```
 
 **Fix:**
-```bash
-copy config\Config.example.js config\Config.js
-notepad config\Config.js
-# Add your token and save
+1. Make sure `.env` file exists in root directory
+2. Check that it contains: `GITHUB_TOKEN=ghp_your_token_here`
+3. Make sure there are no spaces around `=`
+4. Run `npm start` again
+
+---
+
+### Issue: "Config.js not found"
+
+**Error message:**
 ```
+Error: Cannot find module '../config/Config'
+```
+
+**Fix:**
+1. Make sure you have `config/Config.js` file
+2. This file should read from `.env` automatically
+3. Run `npm install dotenv` to ensure dotenv is installed
 
 ---
 
@@ -356,7 +369,8 @@ npm run report:all
 - [ ] Node.js installed (v14+)
 - [ ] Dependencies installed (`npm install`)
 - [ ] GitHub token generated (with `repo` scope)
-- [ ] Config.js created and updated with token
+- [ ] `.env` file created from `.env.example`
+- [ ] `.env` file updated with your GitHub token
 - [ ] First report runs successfully (`npm start`)
 - [ ] Reports appear in `reports/` folder
 
@@ -376,12 +390,14 @@ Reports saved in:
   reports/weekly/        → Weekly reports
   reports/monthly/       → Monthly reports
 
-Config location:
-  config/Config.js       → Your configuration
+Configuration:
+  .env                   → Your settings & token
+  .env.example           → Template (safe to commit)
 
 Token setup:
   github.com/settings/tokens → Get token
   Select: ✅ repo scope
+  Update .env with token
 ```
 
 ---
