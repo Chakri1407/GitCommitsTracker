@@ -5,7 +5,7 @@
  * Tracks contributions across ALL repositories in an organization
  */
 
-const GitHubDevTracker = require('./GithubDevTracker.js');
+const GitHubDevTracker = require('./GitHubDevTracker');
 const Table = require('cli-table3');
 const fs = require('fs').promises;
 const { Command } = require('commander');
@@ -22,7 +22,7 @@ class MultiRepoTracker {
     }
 
     /**
-     * Get all repositories in the organization
+     * Get all repositories accessible to the user (works without org membership)
      */
     async getAllRepositories() {
         const axios = require('axios');
@@ -30,18 +30,19 @@ class MultiRepoTracker {
         let page = 1;
         const perPage = 100;
 
-        console.log(`📋 Fetching repositories for organization: ${this.orgName}...`);
+        console.log(`📋 Auto-discovering repositories you have access to...`);
 
+        // First, try to get user's repos (includes collaborator repos)
         while (true) {
             try {
                 const response = await axios.get(
-                    `https://api.github.com/orgs/${this.orgName}/repos`,
+                    'https://api.github.com/user/repos',
                     {
                         headers: this.headers,
                         params: {
                             per_page: perPage,
                             page: page,
-                            type: 'all' // public, private, or all
+                            affiliation: 'owner,collaborator,organization_member'
                         }
                     }
                 );
@@ -51,7 +52,12 @@ class MultiRepoTracker {
                     break;
                 }
 
-                repos.push(...pageRepos.map(r => r.name));
+                // Filter by organization if specified
+                const filteredRepos = this.orgName
+                    ? pageRepos.filter(r => r.owner.login === this.orgName)
+                    : pageRepos;
+
+                repos.push(...filteredRepos.map(r => r.name));
                 page++;
 
                 if (pageRepos.length < perPage) {
@@ -63,7 +69,7 @@ class MultiRepoTracker {
             }
         }
 
-        console.log(`✅ Found ${repos.length} repositories\n`);
+        console.log(`✅ Found ${repos.length} repositories${this.orgName ? ` in ${this.orgName}` : ''}\n`);
         return repos;
     }
 
