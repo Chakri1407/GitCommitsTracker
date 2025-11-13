@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Configuration (contains sensitive tokens)
+config.js
+
+# Generated reports
+*_report_*.json
+*.log
+
+# Environment files
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Output files
+reports/
+logs/ 
