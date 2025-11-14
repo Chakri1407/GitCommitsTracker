@@ -3,6 +3,7 @@
 /**
  * Multi-Repository GitHub Dev Tracker for SoluLab
  * Tracks contributions across ALL repositories in an organization
+ * FIXED: Now ranks by COMMITS (primary), NET LINES (tiebreaker)
  */
 
 const GitHubDevTracker = require('./GitHubDevTracker');
@@ -22,19 +23,79 @@ class MultiRepoTracker {
     }
 
     /**
-     * Get all repositories accessible to the user (works without org membership)
+     * Get all repositories accessible to the user
+     * Tries organization endpoint first, falls back to user repos
      */
     async getAllRepositories() {
         const axios = require('axios');
         const repos = [];
         let page = 1;
         const perPage = 100;
+        let totalFetched = 0;
 
         console.log(`📋 Auto-discovering repositories you have access to...`);
 
-        // First, try to get user's repos (includes collaborator repos)
+        // Method 1: Try organization endpoint first (works if you're a member)
+        if (this.orgName) {
+            console.log(`   Attempting to fetch from organization: ${this.orgName}...`);
+            
+            try {
+                while (true) {
+                    const response = await axios.get(
+                        `https://api.github.com/orgs/${this.orgName}/repos`,
+                        {
+                            headers: this.headers,
+                            params: {
+                                per_page: perPage,
+                                page: page,
+                                type: 'all',
+                                sort: 'updated',
+                                direction: 'desc'
+                            }
+                        }
+                    );
+
+                    const pageRepos = response.data;
+                    
+                    if (!pageRepos || pageRepos.length === 0) {
+                        break;
+                    }
+                    
+                    totalFetched += pageRepos.length;
+                    console.log(`   Page ${page}: Found ${pageRepos.length} repositories (Total: ${totalFetched})`);
+                    
+                    repos.push(...pageRepos.map(r => r.name));
+                    page++;
+
+                    if (pageRepos.length < perPage) {
+                        console.log(`   Reached end of organization repositories`);
+                        break;
+                    }
+                }
+                
+                if (repos.length > 0) {
+                    console.log(`✅ Found ${repos.length} repositories in ${this.orgName} organization\n`);
+                    return repos;
+                }
+            } catch (error) {
+                if (error.response && error.response.status === 404) {
+                    console.log(`   Organization endpoint not accessible (404)`);
+                } else {
+                    console.log(`   Organization endpoint error: ${error.message}`);
+                }
+                console.log(`   Falling back to user repositories endpoint...\n`);
+            }
+        }
+
+        // Method 2: Fallback to user repos endpoint
+        page = 1;
+        totalFetched = 0;
+        repos.length = 0; // Clear any partial results
+
         while (true) {
             try {
+                console.log(`   Fetching page ${page}...`);
+                
                 const response = await axios.get(
                     'https://api.github.com/user/repos',
                     {
@@ -42,35 +103,144 @@ class MultiRepoTracker {
                         params: {
                             per_page: perPage,
                             page: page,
-                            affiliation: 'owner,collaborator,organization_member'
+                            affiliation: 'owner,collaborator,organization_member',
+                            sort: 'updated',
+                            direction: 'desc'
                         }
                     }
                 );
 
                 const pageRepos = response.data;
+                
                 if (!pageRepos || pageRepos.length === 0) {
+                    console.log(`   No more repositories found.`);
                     break;
                 }
+                
+                totalFetched += pageRepos.length;
+                console.log(`   Found ${pageRepos.length} repositories on page ${page} (Total so far: ${totalFetched})`);
 
                 // Filter by organization if specified
                 const filteredRepos = this.orgName
-                    ? pageRepos.filter(r => r.owner.login === this.orgName)
+                    ? pageRepos.filter(r => {
+                        // Case-insensitive comparison
+                        return r.owner.login.toLowerCase() === this.orgName.toLowerCase();
+                    })
                     : pageRepos;
+
+                const filteredCount = filteredRepos.length;
+                if (this.orgName) {
+                    console.log(`   After filtering by "${this.orgName}": ${filteredCount} repositories match`);
+                }
 
                 repos.push(...filteredRepos.map(r => r.name));
                 page++;
 
+                // If we got less than perPage, we're done
                 if (pageRepos.length < perPage) {
+                    console.log(`   Reached end of repositories (got ${pageRepos.length} < ${perPage})`);
                     break;
                 }
             } catch (error) {
-                console.error(`Error fetching repositories: ${error.message}`);
+                console.error(`   Error fetching repositories page ${page}: ${error.message}`);
+                if (error.response) {
+                    console.error(`   Status: ${error.response.status}`);
+                    if (error.response.status === 401) {
+                        console.error(`   ⚠️  Token may be invalid or expired`);
+                    }
+                }
                 break;
             }
         }
 
         console.log(`✅ Found ${repos.length} repositories${this.orgName ? ` in ${this.orgName}` : ''}\n`);
+        
+        if (repos.length === 0) {
+            console.warn(`⚠️  WARNING: No repositories found! Check:`);
+            console.warn(`   1. Token has 'repo' scope`);
+            console.warn(`   2. Organization name is correct: "${this.orgName}" (case-sensitive)`);
+            console.warn(`   3. You have access to repositories in this organization`);
+            console.warn(`   4. Try checking: https://github.com/orgs/${this.orgName}/repositories\n`);
+        } else if (repos.length < 20 && this.orgName) {
+            console.warn(`⚠️  Note: Found only ${repos.length} repositories.`);
+            console.warn(`   If you expect more, verify organization name spelling (case matters!)\n`);
+        }
+        
         return repos;
+    }
+
+    /**
+     * Get all contributors from all repositories (including inactive ones)
+     */
+    async getAllContributors() {
+        const axios = require('axios');
+        const allContributors = new Set();
+        
+        const reposToTrack = this.repositories || await this.getAllRepositories();
+        
+        console.log(`👥 Fetching all contributors from ${reposToTrack.length} repositories...`);
+        
+        let repoCount = 0;
+        for (const repo of reposToTrack) {
+            repoCount++;
+            try {
+                let page = 1;
+                const perPage = 100;
+                let repoContributors = 0;
+                
+                // Paginate through all contributors for this repo
+                while (true) {
+                    const response = await axios.get(
+                        `https://api.github.com/repos/${this.orgName}/${repo}/contributors`,
+                        {
+                            headers: this.headers,
+                            params: {
+                                per_page: perPage,
+                                page: page,
+                                anon: 'false'
+                            }
+                        }
+                    );
+                    
+                    const contributors = response.data;
+                    
+                    if (!contributors || contributors.length === 0) {
+                        break;
+                    }
+                    
+                    contributors.forEach(contributor => {
+                        if (!allContributors.has(contributor.login)) {
+                            allContributors.add(contributor.login);
+                            repoContributors++;
+                        }
+                    });
+                    
+                    page++;
+                    
+                    // If we got less than perPage, we're done with this repo
+                    if (contributors.length < perPage) {
+                        break;
+                    }
+                }
+                
+                if (repoCount % 5 === 0) {
+                    console.log(`   Processed ${repoCount}/${reposToTrack.length} repositories... (${allContributors.size} unique contributors found)`);
+                }
+            } catch (error) {
+                // Repo might be empty or inaccessible, skip it
+                if (error.response && error.response.status === 404) {
+                    // Repository not found or no access
+                    continue;
+                } else {
+                    console.error(`   Error fetching contributors from ${repo}: ${error.message}`);
+                }
+                continue;
+            }
+        }
+        
+        console.log(`✅ Found ${allContributors.size} unique team members across all repositories\n`);
+        
+        return Array.from(allContributors);
     }
 
     /**
@@ -82,14 +252,37 @@ class MultiRepoTracker {
 
         if (reposToTrack.length === 0) {
             console.log('No repositories found.');
-            return { aggregated: {}, byRepo: {} };
+            return { aggregated: {}, byRepo: {}, allContributors: [] };
         }
 
         console.log(`🔍 Analyzing ${reposToTrack.length} repositories...`);
-        console.log(`   Repositories: ${reposToTrack.join(', ')}\n`);
+        
+        // Show repository list (limit to first 10 if too many)
+        if (reposToTrack.length <= 10) {
+            console.log(`   Repositories: ${reposToTrack.join(', ')}\n`);
+        } else {
+            console.log(`   First 10 repositories: ${reposToTrack.slice(0, 10).join(', ')}`);
+            console.log(`   ... and ${reposToTrack.length - 10} more\n`);
+        }
+
+        // Get all contributors from all repositories
+        const allContributors = await this.getAllContributors();
 
         const aggregatedStats = {};
         const statsByRepo = {};
+
+        // Initialize all contributors with 0 stats
+        for (const contributor of allContributors) {
+            aggregatedStats[contributor] = {
+                commits: 0,
+                additions: 0,
+                deletions: 0,
+                netLines: 0,
+                repositories: [],
+                email: '',
+                name: contributor
+            };
+        }
 
         // Track progress
         let completed = 0;
@@ -137,6 +330,8 @@ class MultiRepoTracker {
                     aggregatedStats[dev].additions += data.additions;
                     aggregatedStats[dev].deletions += data.deletions;
                     aggregatedStats[dev].netLines += data.netLines;
+                    aggregatedStats[dev].email = data.email || aggregatedStats[dev].email;
+                    aggregatedStats[dev].name = data.name || aggregatedStats[dev].name;
                     
                     if (!aggregatedStats[dev].repositories.includes(repo)) {
                         aggregatedStats[dev].repositories.push(repo);
@@ -150,13 +345,14 @@ class MultiRepoTracker {
             }
         }
 
-        return { aggregated: aggregatedStats, byRepo: statsByRepo };
+        return { aggregated: aggregatedStats, byRepo: statsByRepo, allContributors };
     }
 
     /**
      * Create leaderboard from aggregated stats
+     * FIXED: Sorted by commits (primary), then net lines (tiebreaker)
      */
-    createLeaderboard(stats, topN = 10) {
+    createLeaderboard(stats, topN = null) {
         const leaderboard = [];
 
         for (const [dev, data] of Object.entries(stats)) {
@@ -172,10 +368,16 @@ class MultiRepoTracker {
             });
         }
 
-        // Sort by net lines (descending)
-        leaderboard.sort((a, b) => b.netLines - a.netLines);
+        // Sort by commits (descending), then by net lines if commits are equal
+        leaderboard.sort((a, b) => {
+            if (b.commits !== a.commits) {
+                return b.commits - a.commits;
+            }
+            return b.netLines - a.netLines;
+        });
 
-        return leaderboard.slice(0, topN);
+        // Return all if topN is null, otherwise return top N
+        return topN ? leaderboard.slice(0, topN) : leaderboard;
     }
 
     /**
@@ -206,25 +408,41 @@ class MultiRepoTracker {
         console.log('='.repeat(90) + '\n');
 
         if (Object.keys(stats).length === 0) {
-            console.log('No commits found for this period.\n');
+            console.log('No team members found.\n');
             return;
         }
 
-        // Create leaderboard
-        const leaderboard = this.createLeaderboard(stats, 20);
+        // Create leaderboard - Show ALL contributors (including inactive)
+        const leaderboard = this.createLeaderboard(stats, null);
 
-        // Create table
+        // Separate active and inactive contributors
+        const activeContributors = leaderboard.filter(dev => dev.commits > 0);
+        const inactiveContributors = leaderboard.filter(dev => dev.commits === 0);
+
+        // Create table with Repositories column
         const table = new Table({
-            head: ['Rank', 'Username', 'Name', 'Repos', 'Commits', 'Additions', 'Deletions', 'Net Lines'],
-            colWidths: [6, 18, 22, 8, 10, 12, 12, 12]
+            head: ['Rank', 'Username', 'Name', 'Repositories', 'Commits', 'Additions', 'Deletions', 'Net Lines'],
+            colWidths: [6, 18, 22, 35, 10, 12, 12, 12],
+            wordWrap: true
         });
 
-        leaderboard.forEach((dev, index) => {
+        // Add active contributors first
+        activeContributors.forEach((dev, index) => {
+            // Format repositories list
+            let repoDisplay;
+            if (dev.repositories.length === 0) {
+                repoDisplay = 'No Activity';
+            } else if (dev.repositories.length <= 2) {
+                repoDisplay = dev.repositories.join(', ');
+            } else {
+                repoDisplay = `${dev.repositories.slice(0, 2).join(', ')} (+${dev.repositories.length - 2} more)`;
+            }
+
             table.push([
                 index + 1,
                 dev.username,
                 dev.name,
-                dev.repoCount,
+                repoDisplay,
                 dev.commits,
                 `+${dev.additions}`,
                 `-${dev.deletions}`,
@@ -232,16 +450,41 @@ class MultiRepoTracker {
             ]);
         });
 
+        // Add separator if there are inactive contributors
+        if (inactiveContributors.length > 0) {
+            table.push([
+                { colSpan: 8, content: '--- Inactive Team Members (No commits in this period) ---', hAlign: 'center' }
+            ]);
+
+            // Add inactive contributors
+            inactiveContributors.forEach((dev) => {
+                table.push([
+                    '-',
+                    dev.username,
+                    dev.name,
+                    'No Activity',
+                    0,
+                    '+0',
+                    '-0',
+                    0
+                ]);
+            });
+        }
+
         console.log(table.toString());
 
-        // Show top contributor details
-        if (leaderboard.length > 0) {
-            console.log(`\n🏆 Top Contributor: ${leaderboard[0].username}`);
-            console.log(`   Repositories: ${leaderboard[0].repositories.join(', ')}`);
+        // Show top contributor details (if any active contributors)
+        if (activeContributors.length > 0) {
+            console.log(`\n🏆 Top Contributor: ${activeContributors[0].username}`);
+            console.log(`   Total Commits: ${activeContributors[0].commits}`);
+            console.log(`   Total Repositories: ${activeContributors[0].repoCount}`);
+            console.log(`   Repositories: ${activeContributors[0].repositories.join(', ')}`);
         }
 
         // Summary statistics
         const totalDevs = Object.keys(stats).length;
+        const activeDevs = activeContributors.length;
+        const inactiveDevs = inactiveContributors.length;
         const totalCommits = Object.values(stats).reduce((sum, data) => sum + data.commits, 0);
         const totalAdditions = Object.values(stats).reduce((sum, data) => sum + data.additions, 0);
         const totalDeletions = Object.values(stats).reduce((sum, data) => sum + data.deletions, 0);
@@ -255,12 +498,15 @@ class MultiRepoTracker {
 
         console.log(`\n${'SUMMARY'.padStart(45)}`);
         console.log('-'.repeat(90));
+        console.log(`Total Team Members: ${totalDevs}`);
+        console.log(`Active Developers: ${activeDevs}`);
+        console.log(`Inactive Developers: ${inactiveDevs}`);
         console.log(`Total Repositories with Activity: ${activeRepos.size}`);
-        console.log(`Total Developers Active: ${totalDevs}`);
         console.log(`Total Commits: ${totalCommits}`);
         console.log(`Total Lines Added: +${totalAdditions}`);
         console.log(`Total Lines Deleted: -${totalDeletions}`);
         console.log(`Net Lines Changed: ${totalNet}`);
+        console.log(`Ranking: By Commits (primary), Net Lines (tiebreaker)`);
         console.log('-'.repeat(90) + '\n');
     }
 
@@ -296,7 +542,7 @@ class MultiRepoTracker {
             });
         }
 
-        // Sort by commits
+        // Sort by commits (active repos first)
         repoSummary.sort((a, b) => b.commits - a.commits);
 
         repoSummary.forEach(r => {
@@ -311,7 +557,65 @@ class MultiRepoTracker {
         });
 
         console.log(repoTable.toString());
-        console.log();
+    }
+
+    /**
+     * Print detailed contributor breakdown by repository
+     */
+    printContributorBreakdown(statsByRepo) {
+        console.log('\n' + '='.repeat(110));
+        console.log('Detailed Contributor Breakdown by Repository'.padStart(65));
+        console.log('='.repeat(110) + '\n');
+
+        // Get repos with activity (sort by commits)
+        const activeRepos = [];
+        for (const [repo, stats] of Object.entries(statsByRepo)) {
+            const totalCommits = Object.values(stats).reduce((sum, s) => sum + s.commits, 0);
+            if (totalCommits > 0) {
+                activeRepos.push({ repo, stats, totalCommits });
+            }
+        }
+
+        // Sort by total commits (descending)
+        activeRepos.sort((a, b) => b.totalCommits - a.totalCommits);
+
+        // Show breakdown for each active repository
+        activeRepos.forEach(({ repo, stats }, index) => {
+            console.log(`\n${index + 1}. Repository: ${repo}`);
+            console.log('-'.repeat(110));
+
+            const contributorTable = new Table({
+                head: ['Username', 'Name', 'Commits', 'Additions', 'Deletions', 'Net Lines'],
+                colWidths: [20, 25, 10, 15, 15, 15]
+            });
+
+            // Sort contributors by commits
+            const contributors = Object.entries(stats)
+                .map(([username, data]) => ({
+                    username,
+                    name: data.name,
+                    commits: data.commits,
+                    additions: data.additions,
+                    deletions: data.deletions,
+                    netLines: data.additions - data.deletions
+                }))
+                .sort((a, b) => b.commits - a.commits);
+
+            contributors.forEach(c => {
+                contributorTable.push([
+                    c.username,
+                    c.name,
+                    c.commits,
+                    `+${c.additions}`,
+                    `-${c.deletions}`,
+                    c.netLines
+                ]);
+            });
+
+            console.log(contributorTable.toString());
+        });
+
+        console.log('\n' + '='.repeat(110) + '\n');
     }
 
     /**

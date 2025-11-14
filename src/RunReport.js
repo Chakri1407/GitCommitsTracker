@@ -3,6 +3,7 @@
 /**
  * Automated GitHub Dev Tracker Runner
  * Uses config.js for easy configuration
+ * Enhanced version with inactive users in main reports
  */
 
 const GitHubDevTracker = require('./GitHubDevTracker');
@@ -44,13 +45,14 @@ async function runDailyReport() {
     try {
         const today = new Date();
         const dailyStats = await tracker.getDailyReport(today);
-        tracker.printReport('daily', dailyStats, today);
+        await tracker.printReport('daily', dailyStats, today);
 
         if (config.reports.exportToJson) {
             const filename = path.join(dailyDir, `daily_report_${today.toISOString().split('T')[0]}.json`);
             await tracker.exportToJson(dailyStats, filename);
         }
 
+        // Legacy inactive report if explicitly configured
         if (config.reports.showInactive) {
             await tracker.printInactiveReport(today);
         }
@@ -74,7 +76,7 @@ async function runWeeklyReport() {
     try {
         const today = new Date();
         const weeklyStats = await tracker.getWeeklyReport(today);
-        tracker.printReport('weekly', weeklyStats, today);
+        await tracker.printReport('weekly', weeklyStats, today);
 
         if (config.reports.exportToJson) {
             const filename = path.join(weeklyDir, `weekly_report_${today.toISOString().split('T')[0]}.json`);
@@ -100,7 +102,7 @@ async function runMonthlyReport() {
     try {
         const today = new Date();
         const monthlyStats = await tracker.getMonthlyReport(today);
-        tracker.printReport('monthly', monthlyStats, today);
+        await tracker.printReport('monthly', monthlyStats, today);
 
         if (config.reports.exportToJson) {
             const filename = path.join(monthlyDir, `monthly_report_${today.toISOString().split('T')[0]}.json`);
@@ -116,10 +118,94 @@ async function runMonthlyReport() {
 
 async function runAllReports() {
     console.log('🚀 Running All Reports (Daily + Weekly + Monthly)...\n');
+    console.log('═'.repeat(80));
+    console.log('                    COMPREHENSIVE REPORT GENERATION');
+    console.log('                    Generating: Daily, Weekly, and Monthly Reports');
+    console.log('═'.repeat(80) + '\n');
     
-    await runDailyReport();
-    await runWeeklyReport();
-    await runMonthlyReport();
+    const tracker = new GitHubDevTracker(
+        config.github.organization,
+        config.github.repository,
+        config.github.token
+    );
+
+    const today = new Date();
+    
+    try {
+        // Generate and display all three reports
+        console.log('\n' + '█'.repeat(80));
+        console.log('█'.repeat(32) + ' DAILY REPORT ' + '█'.repeat(33));
+        console.log('█'.repeat(80) + '\n');
+        const dailyStats = await tracker.getDailyReport(today);
+        await tracker.printReport('daily', dailyStats, today);
+        if (config.reports.exportToJson) {
+            const filename = path.join(dailyDir, `daily_report_${today.toISOString().split('T')[0]}.json`);
+            await tracker.exportToJson(dailyStats, filename);
+        }
+        
+        console.log('\n' + '█'.repeat(80));
+        console.log('█'.repeat(32) + ' WEEKLY REPORT ' + '█'.repeat(32));
+        console.log('█'.repeat(80) + '\n');
+        const weeklyStats = await tracker.getWeeklyReport(today);
+        await tracker.printReport('weekly', weeklyStats, today);
+        if (config.reports.exportToJson) {
+            const filename = path.join(weeklyDir, `weekly_report_${today.toISOString().split('T')[0]}.json`);
+            await tracker.exportToJson(weeklyStats, filename);
+        }
+        
+        console.log('\n' + '█'.repeat(80));
+        console.log('█'.repeat(31) + ' MONTHLY REPORT ' + '█'.repeat(32));
+        console.log('█'.repeat(80) + '\n');
+        const monthlyStats = await tracker.getMonthlyReport(today);
+        await tracker.printReport('monthly', monthlyStats, today);
+        if (config.reports.exportToJson) {
+            const filename = path.join(monthlyDir, `monthly_report_${today.toISOString().split('T')[0]}.json`);
+            await tracker.exportToJson(monthlyStats, filename);
+        }
+
+        // Legacy inactive report if explicitly configured
+        if (config.reports.showInactive) {
+            await tracker.printInactiveReport(today);
+        }
+        
+        // Print summary of all three reports at the end
+        console.log('\n' + '═'.repeat(80));
+        console.log('═'.repeat(80));
+        console.log('                           SUMMARY - ALL REPORTS');
+        console.log('═'.repeat(80));
+        console.log('═'.repeat(80) + '\n');
+        
+        // Show Daily report table again
+        console.log('\n' + '▓'.repeat(80));
+        console.log('▓' + ' '.repeat(32) + 'DAILY REPORT' + ' '.repeat(33) + '▓');
+        console.log('▓'.repeat(80) + '\n');
+        await tracker.printReport('daily', dailyStats, today);
+        
+        // Show Weekly report table again
+        console.log('\n' + '▓'.repeat(80));
+        console.log('▓' + ' '.repeat(31) + 'WEEKLY REPORT' + ' '.repeat(33) + '▓');
+        console.log('▓'.repeat(80) + '\n');
+        await tracker.printReport('weekly', weeklyStats, today);
+        
+        // Show Monthly report table again
+        console.log('\n' + '▓'.repeat(80));
+        console.log('▓' + ' '.repeat(30) + 'MONTHLY REPORT' + ' '.repeat(33) + '▓');
+        console.log('▓'.repeat(80) + '\n');
+        await tracker.printReport('monthly', monthlyStats, today);
+        
+        console.log('\n' + '═'.repeat(80));
+        console.log('                      ALL REPORTS COMPLETED SUCCESSFULLY!');
+        console.log('═'.repeat(80));
+        console.log('\n📊 Reports Generated:');
+        console.log('   ✓ Daily Report   - Last 24 hours');
+        console.log('   ✓ Weekly Report  - Last 7 days');
+        console.log('   ✓ Monthly Report - Last 30 days');
+        console.log(`\n📁 All reports saved to: ${reportsDir}\n`);
+
+    } catch (error) {
+        console.error('❌ Error running reports:', error.message);
+        process.exit(1);
+    }
 }
 
 // Main script logic

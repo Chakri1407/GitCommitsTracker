@@ -127,10 +127,91 @@ async function runMonthlyReport() {
 
 async function runAllReports() {
     console.log('🚀 Running All Reports (Daily + Weekly + Monthly) - All Repositories...\n');
+    console.log('═'.repeat(90));
+    console.log('                    COMPREHENSIVE REPORT GENERATION');
+    console.log('                    Generating: Daily, Weekly, and Monthly Reports');
+    console.log('═'.repeat(90) + '\n');
     
-    await runDailyReport();
-    await runWeeklyReport();
-    await runMonthlyReport();
+    const tracker = new MultiRepoTracker(
+        config.github.organization,
+        config.github.token,
+        config.github.repositories || null
+    );
+
+    const today = new Date();
+    
+    // Generate and display all three reports
+    console.log('\n' + '█'.repeat(90));
+    console.log('█'.repeat(35) + ' DAILY REPORT ' + '█'.repeat(42));
+    console.log('█'.repeat(90) + '\n');
+    const { aggregated: dailyStats, byRepo: dailyByRepo } = await tracker.aggregateStats('daily', today);
+    tracker.printAggregatedReport('daily', dailyStats, today);
+    if (config.reports.showRepositoryBreakdown) {
+        tracker.printRepositoryBreakdown(dailyByRepo);
+    }
+    
+    console.log('\n' + '█'.repeat(90));
+    console.log('█'.repeat(35) + ' WEEKLY REPORT ' + '█'.repeat(41));
+    console.log('█'.repeat(90) + '\n');
+    const { aggregated: weeklyStats, byRepo: weeklyByRepo } = await tracker.aggregateStats('weekly', today);
+    tracker.printAggregatedReport('weekly', weeklyStats, today);
+    if (config.reports.showRepositoryBreakdown) {
+        tracker.printRepositoryBreakdown(weeklyByRepo);
+    }
+    
+    console.log('\n' + '█'.repeat(90));
+    console.log('█'.repeat(34) + ' MONTHLY REPORT ' + '█'.repeat(40));
+    console.log('█'.repeat(90) + '\n');
+    const { aggregated: monthlyStats, byRepo: monthlyByRepo } = await tracker.aggregateStats('monthly', today);
+    tracker.printAggregatedReport('monthly', monthlyStats, today);
+    if (config.reports.showRepositoryBreakdown) {
+        tracker.printRepositoryBreakdown(monthlyByRepo);
+    }
+    
+    // Export all reports if configured
+    if (config.reports.exportToJson) {
+        const dailyFilename = path.join(dailyDir, `multi_repo_daily_report_${today.toISOString().split('T')[0]}.json`);
+        const weeklyFilename = path.join(weeklyDir, `multi_repo_weekly_report_${today.toISOString().split('T')[0]}.json`);
+        const monthlyFilename = path.join(monthlyDir, `multi_repo_monthly_report_${today.toISOString().split('T')[0]}.json`);
+        
+        await tracker.exportToJson(dailyStats, dailyByRepo, dailyFilename);
+        await tracker.exportToJson(weeklyStats, weeklyByRepo, weeklyFilename);
+        await tracker.exportToJson(monthlyStats, monthlyByRepo, monthlyFilename);
+    }
+    
+    // Print all three reports again at the end for easy comparison
+    console.log('\n' + '═'.repeat(150));
+    console.log('═'.repeat(150));
+    console.log('                                    SUMMARY - ALL REPORTS');
+    console.log('═'.repeat(150));
+    console.log('═'.repeat(150) + '\n');
+    
+    // Show Daily report table again
+    console.log('\n' + '▓'.repeat(90));
+    console.log('▓' + ' '.repeat(35) + 'DAILY REPORT' + ' '.repeat(42) + '▓');
+    console.log('▓'.repeat(90) + '\n');
+    tracker.printAggregatedReport('daily', dailyStats, today);
+    
+    // Show Weekly report table again
+    console.log('\n' + '▓'.repeat(90));
+    console.log('▓' + ' '.repeat(34) + 'WEEKLY REPORT' + ' '.repeat(41) + '▓');
+    console.log('▓'.repeat(90) + '\n');
+    tracker.printAggregatedReport('weekly', weeklyStats, today);
+    
+    // Show Monthly report table again
+    console.log('\n' + '▓'.repeat(90));
+    console.log('▓' + ' '.repeat(33) + 'MONTHLY REPORT' + ' '.repeat(41) + '▓');
+    console.log('▓'.repeat(90) + '\n');
+    tracker.printAggregatedReport('monthly', monthlyStats, today);
+    
+    console.log('\n' + '═'.repeat(150));
+    console.log('                            ALL REPORTS COMPLETED SUCCESSFULLY!');
+    console.log('═'.repeat(150));
+    console.log('\n📊 Reports Generated:');
+    console.log('   ✓ Daily Report   - Last 24 hours');
+    console.log('   ✓ Weekly Report  - Last 7 days');
+    console.log('   ✓ Monthly Report - Last 30 days');
+    console.log('\n📁 All reports saved to: ./reports/\n');
 }
 
 // Main script logic

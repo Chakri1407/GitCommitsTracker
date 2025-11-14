@@ -3,6 +3,7 @@
 /**
  * GitHub Developer Contribution Tracker for SoluLab
  * Tracks lines of code committed by each developer with leaderboards and reports
+ * Enhanced version with ALL BRANCHES support and inactive users display
  */
 
 const axios = require('axios');
@@ -22,9 +23,47 @@ class GitHubDevTracker {
     }
 
     /**
-     * Get all commits in a date range
+     * Get all branches in the repository
      */
-    async getCommitsInRange(since, until) {
+    async getAllBranches() {
+        const branches = [];
+        let page = 1;
+        const perPage = 100;
+
+        try {
+            while (true) {
+                const response = await axios.get(`${this.baseUrl}/branches`, {
+                    headers: this.headers,
+                    params: {
+                        per_page: perPage,
+                        page: page
+                    }
+                });
+
+                const pageBranches = response.data;
+
+                if (!pageBranches || pageBranches.length === 0) {
+                    break;
+                }
+
+                branches.push(...pageBranches.map(b => b.name));
+                page++;
+
+                if (pageBranches.length < perPage) {
+                    break;
+                }
+            }
+        } catch (error) {
+            console.error(`Error fetching branches: ${error.message}`);
+        }
+
+        return branches;
+    }
+
+    /**
+     * Get all commits from a specific branch in a date range
+     */
+    async getCommitsFromBranch(branchName, since, until) {
         const commits = [];
         let page = 1;
         const perPage = 100;
@@ -34,6 +73,7 @@ class GitHubDevTracker {
                 const response = await axios.get(`${this.baseUrl}/commits`, {
                     headers: this.headers,
                     params: {
+                        sha: branchName,  // Specify branch
                         since: since.toISOString(),
                         until: until.toISOString(),
                         per_page: perPage,
@@ -55,16 +95,56 @@ class GitHubDevTracker {
                     break;
                 }
             } catch (error) {
-                console.error(`Error fetching commits: ${error.message}`);
-                if (error.response) {
-                    console.error(`Status: ${error.response.status}`);
-                    console.error(`Data:`, error.response.data);
+                // Branch might not exist or be accessible, skip it
+                if (error.response && error.response.status === 409) {
+                    // Empty repository
+                    break;
                 }
+                console.error(`Error fetching commits from branch ${branchName}: ${error.message}`);
                 break;
             }
         }
 
         return commits;
+    }
+
+    /**
+     * Get all commits from ALL branches in a date range
+     */
+    async getCommitsInRange(since, until) {
+        console.log(`📋 Fetching all branches...`);
+        const branches = await this.getAllBranches();
+        
+        if (branches.length === 0) {
+            console.log(`⚠️  No branches found in repository`);
+            return [];
+        }
+
+        console.log(`✅ Found ${branches.length} branch(es): ${branches.slice(0, 5).join(', ')}${branches.length > 5 ? ` (+${branches.length - 5} more)` : ''}`);
+        console.log(`📊 Fetching commits from all branches (${since.toISOString().split('T')[0]} to ${until.toISOString().split('T')[0]})...`);
+
+        const allCommits = new Map(); // Use Map to deduplicate by SHA
+
+        for (let i = 0; i < branches.length; i++) {
+            const branch = branches[i];
+            const branchCommits = await this.getCommitsFromBranch(branch, since, until);
+            
+            if (branchCommits.length > 0) {
+                console.log(`   Branch "${branch}": ${branchCommits.length} commits`);
+                
+                // Add commits to map (automatically deduplicates by SHA)
+                branchCommits.forEach(commit => {
+                    if (!allCommits.has(commit.sha)) {
+                        allCommits.set(commit.sha, commit);
+                    }
+                });
+            }
+        }
+
+        const uniqueCommits = Array.from(allCommits.values());
+        console.log(`✅ Total unique commits across all branches: ${uniqueCommits.length}\n`);
+
+        return uniqueCommits;
     }
 
     /**
@@ -92,11 +172,41 @@ class GitHubDevTracker {
      */
     async getAllContributors() {
         try {
-            const response = await axios.get(`${this.baseUrl}/contributors`, {
-                headers: this.headers
-            });
+            let page = 1;
+            const perPage = 100;
+            const allContributors = [];
 
-            return response.data.map(c => c.login);
+            while (true) {
+                const response = await axios.get(`${this.baseUrl}/contributors`, {
+                    headers: this.headers,
+                    params: {
+                        per_page: perPage,
+                        page: page,
+                        anon: 'false'
+                    }
+                });
+
+                const contributors = response.data;
+
+                if (!contributors || contributors.length === 0) {
+                    break;
+                }
+
+                allContributors.push(...contributors.map(c => ({
+                    login: c.login,
+                    name: c.login,
+                    contributions: c.contributions
+                })));
+
+                page++;
+
+                // If we got less than perPage, we're done
+                if (contributors.length < perPage) {
+                    break;
+                }
+            }
+
+            return allContributors;
         } catch (error) {
             console.error(`Error fetching contributors: ${error.message}`);
             return [];
@@ -107,16 +217,20 @@ class GitHubDevTracker {
      * Analyze commits and return statistics per developer
      */
     async analyzeCommits(since, until) {
-        console.log(`Fetching commits from ${since.toISOString().split('T')[0]} to ${until.toISOString().split('T')[0]}...`);
-        
         const commits = await this.getCommitsInRange(since, until);
-        console.log(`Found ${commits.length} commits. Analyzing...`);
+        
+        if (commits.length === 0) {
+            console.log('No commits found in the specified period.\n');
+            return {};
+        }
+
+        console.log(`🔍 Analyzing ${commits.length} commits...`);
 
         const devStats = {};
 
         for (let idx = 0; idx < commits.length; idx++) {
-            if (idx % 10 === 0) {
-                console.log(`Processing commit ${idx + 1}/${commits.length}...`);
+            if (idx % 10 === 0 && idx > 0) {
+                console.log(`   Processing commit ${idx}/${commits.length}...`);
             }
 
             const commit = commits[idx];
@@ -149,6 +263,7 @@ class GitHubDevTracker {
             devStats[authorId].commitShas.push(commitSha);
         }
 
+        console.log(`✅ Analysis complete!\n`);
         return devStats;
     }
 
@@ -210,9 +325,9 @@ class GitHubDevTracker {
     }
 
     /**
-     * Create leaderboard sorted by net lines of code
+     * Create leaderboard sorted by number of commits
      */
-    createLeaderboard(stats, topN = 10) {
+    createLeaderboard(stats, topN = null) {
         const leaderboard = [];
 
         for (const [dev, data] of Object.entries(stats)) {
@@ -226,33 +341,50 @@ class GitHubDevTracker {
             });
         }
 
-        // Sort by net lines (descending)
-        leaderboard.sort((a, b) => b.netLines - a.netLines);
+        // Sort by commits (descending), then by net lines if commits are equal
+        leaderboard.sort((a, b) => {
+            if (b.commits !== a.commits) {
+                return b.commits - a.commits;
+            }
+            return b.netLines - a.netLines;
+        });
 
-        return leaderboard.slice(0, topN);
+        // Return all if topN is null, otherwise return top N
+        return topN ? leaderboard.slice(0, topN) : leaderboard;
     }
 
     /**
-     * Get list of developers who haven't committed on given day
+     * Get list of developers who haven't committed in the given period
      */
-    async getInactiveDevs(date = null) {
+    async getInactiveDevs(activeStats) {
         const allContributors = await this.getAllContributors();
-        const dailyStats = await this.getDailyReport(date);
-        const activeDevs = new Set(Object.keys(dailyStats));
+        const activeDevs = new Set(Object.keys(activeStats));
 
-        return allContributors.filter(dev => !activeDevs.has(dev));
+        const inactiveDevs = allContributors
+            .filter(contributor => !activeDevs.has(contributor.login))
+            .map(contributor => ({
+                username: contributor.login,
+                name: contributor.name,
+                commits: 0,
+                additions: 0,
+                deletions: 0,
+                netLines: 0
+            }));
+
+        return inactiveDevs;
     }
 
     /**
-     * Print formatted report
+     * Print formatted report with inactive users
      */
-    printReport(period, stats, date = null) {
+    async printReport(period, stats, date = null) {
         if (!date) {
             date = new Date();
         }
 
         console.log('\n' + '='.repeat(80));
         console.log('SoluLab GitHub Contribution Report'.padStart(50));
+        console.log(`Repository: ${this.repoName} (ALL BRANCHES)`.padStart(50));
         
         // Show date range for weekly and monthly reports
         if (period === 'weekly') {
@@ -271,13 +403,11 @@ class GitHubDevTracker {
         
         console.log('='.repeat(80) + '\n');
 
-        if (Object.keys(stats).length === 0) {
-            console.log('No commits found for this period.\n');
-            return;
-        }
+        // Get all contributors including inactive ones
+        const inactiveDevs = await this.getInactiveDevs(stats);
 
-        // Create leaderboard
-        const leaderboard = this.createLeaderboard(stats, 10);
+        // Create leaderboard - active developers
+        const activeLeaderboard = this.createLeaderboard(stats, null);
 
         // Create table
         const table = new Table({
@@ -285,21 +415,60 @@ class GitHubDevTracker {
             colWidths: [6, 20, 25, 10, 12, 12, 12]
         });
 
-        leaderboard.forEach((dev, index) => {
+        // Add active developers
+        if (activeLeaderboard.length > 0) {
+            activeLeaderboard.forEach((dev, index) => {
+                table.push([
+                    index + 1,
+                    dev.username,
+                    dev.name,
+                    dev.commits,
+                    `+${dev.additions}`,
+                    `-${dev.deletions}`,
+                    dev.netLines
+                ]);
+            });
+        }
+
+        // Add separator if there are inactive developers
+        if (inactiveDevs.length > 0) {
             table.push([
-                index + 1,
-                dev.username,
-                dev.name,
-                dev.commits,
-                `+${dev.additions}`,
-                `-${dev.deletions}`,
-                dev.netLines
+                { colSpan: 7, content: '--- Inactive Team Members (No commits in this period) ---', hAlign: 'center' }
             ]);
-        });
+
+            // Add inactive developers
+            inactiveDevs.forEach((dev) => {
+                table.push([
+                    '-',
+                    dev.username,
+                    dev.name,
+                    0,
+                    '+0',
+                    '-0',
+                    0
+                ]);
+            });
+        }
+
+        // If no active or inactive developers
+        if (activeLeaderboard.length === 0 && inactiveDevs.length === 0) {
+            console.log('No team members found.\n');
+            return;
+        }
 
         console.log(table.toString());
 
+        // Show top contributor (if any)
+        if (activeLeaderboard.length > 0) {
+            console.log(`\n🏆 Top Contributor: ${activeLeaderboard[0].username}`);
+            console.log(`   Total Commits: ${activeLeaderboard[0].commits}`);
+            console.log(`   Net Lines: ${activeLeaderboard[0].netLines}`);
+        }
+
         // Summary statistics
+        const totalDevs = activeLeaderboard.length + inactiveDevs.length;
+        const activeDevCount = activeLeaderboard.length;
+        const inactiveDevCount = inactiveDevs.length;
         const totalCommits = Object.values(stats).reduce((sum, data) => sum + data.commits, 0);
         const totalAdditions = Object.values(stats).reduce((sum, data) => sum + data.additions, 0);
         const totalDeletions = Object.values(stats).reduce((sum, data) => sum + data.deletions, 0);
@@ -307,8 +476,10 @@ class GitHubDevTracker {
 
         console.log(`\n${'SUMMARY'.padStart(45)}`);
         console.log('-'.repeat(80));
-        console.log(`Total Developers Active: ${Object.keys(stats).length}`);
-        console.log(`Total Commits: ${totalCommits}`);
+        console.log(`Total Team Members: ${totalDevs}`);
+        console.log(`Active Developers: ${activeDevCount}`);
+        console.log(`Inactive Developers: ${inactiveDevCount}`);
+        console.log(`Total Commits: ${totalCommits} (from ALL branches)`);
         console.log(`Total Lines Added: +${totalAdditions}`);
         console.log(`Total Lines Deleted: -${totalDeletions}`);
         console.log(`Net Lines Changed: ${totalNet}`);
@@ -316,14 +487,15 @@ class GitHubDevTracker {
     }
 
     /**
-     * Print report of inactive developers
+     * Print report of inactive developers (legacy method for backward compatibility)
      */
     async printInactiveReport(date = null) {
         if (!date) {
             date = new Date();
         }
 
-        const inactive = await this.getInactiveDevs(date);
+        const dailyStats = await this.getDailyReport(date);
+        const inactive = await this.getInactiveDevs(dailyStats);
 
         console.log('\n' + '='.repeat(80));
         console.log('INACTIVE DEVELOPERS REPORT'.padStart(50));
@@ -335,7 +507,7 @@ class GitHubDevTracker {
         } else {
             console.log(`The following ${inactive.length} developer(s) have NOT committed today:\n`);
             inactive.forEach(dev => {
-                console.log(`  • ${dev}`);
+                console.log(`  • ${dev.username}`);
             });
             console.log();
         }
@@ -359,13 +531,13 @@ async function main() {
 
     program
         .name('github-dev-tracker')
-        .description('Track GitHub developer contributions for SoluLab repositories')
+        .description('Track GitHub developer contributions for SoluLab repositories (ALL BRANCHES)')
         .requiredOption('--org <organization>', 'GitHub organization name (e.g., SoluLab)')
         .requiredOption('--repo <repository>', 'Repository name')
         .requiredOption('--token <token>', 'GitHub personal access token')
         .option('--period <type>', 'Report period: daily, weekly, monthly, or all', 'all')
         .option('--date <date>', 'Date for report (YYYY-MM-DD), defaults to today')
-        .option('--inactive', 'Show inactive developers report')
+        .option('--inactive', 'Show inactive developers report (separate)')
         .option('--export', 'Export to JSON file');
 
     program.parse();
@@ -389,7 +561,7 @@ async function main() {
         // Generate reports based on period
         if (options.period === 'daily' || options.period === 'all') {
             const dailyStats = await tracker.getDailyReport(reportDate);
-            tracker.printReport('daily', dailyStats, reportDate);
+            await tracker.printReport('daily', dailyStats, reportDate);
             if (options.export) {
                 await tracker.exportToJson(
                     dailyStats,
@@ -400,7 +572,7 @@ async function main() {
 
         if (options.period === 'weekly' || options.period === 'all') {
             const weeklyStats = await tracker.getWeeklyReport(reportDate);
-            tracker.printReport('weekly', weeklyStats, reportDate);
+            await tracker.printReport('weekly', weeklyStats, reportDate);
             if (options.export) {
                 await tracker.exportToJson(
                     weeklyStats,
@@ -411,7 +583,7 @@ async function main() {
 
         if (options.period === 'monthly' || options.period === 'all') {
             const monthlyStats = await tracker.getMonthlyReport(reportDate);
-            tracker.printReport('monthly', monthlyStats, reportDate);
+            await tracker.printReport('monthly', monthlyStats, reportDate);
             if (options.export) {
                 await tracker.exportToJson(
                     monthlyStats,
@@ -420,7 +592,7 @@ async function main() {
             }
         }
 
-        // Inactive developers report
+        // Inactive developers report (separate legacy report)
         if (options.inactive) {
             await tracker.printInactiveReport(reportDate);
         }
