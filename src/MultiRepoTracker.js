@@ -3,12 +3,10 @@
 /**
  * Multi-Repository GitHub Dev Tracker for SoluLab
  * Tracks contributions across ALL repositories in an organization
- * INDEPENDENT VERSION - Does NOT use GitHubDevTracker
- * Fetches commits from DEFAULT BRANCH ONLY (faster for multi-repo)
- * Ranks by COMMITS (primary), NET LINES (tiebreaker)
+ * FIXED: Now ranks by COMMITS (primary), NET LINES (tiebreaker)
  */
 
-const axios = require('axios');
+const GitHubDevTracker = require('./GitHubDevTracker');
 const Table = require('cli-table3');
 const fs = require('fs').promises;
 const { Command } = require('commander');
@@ -29,6 +27,7 @@ class MultiRepoTracker {
      * Tries organization endpoint first, falls back to user repos
      */
     async getAllRepositories() {
+        const axios = require('axios');
         const repos = [];
         let page = 1;
         const perPage = 100;
@@ -174,6 +173,7 @@ class MultiRepoTracker {
      * Get all contributors from all repositories (including inactive ones)
      */
     async getAllContributors() {
+        const axios = require('axios');
         const allContributors = new Set();
         
         const reposToTrack = this.repositories || await this.getAllRepositories();
@@ -244,159 +244,9 @@ class MultiRepoTracker {
     }
 
     /**
-     * Get commits from DEFAULT BRANCH ONLY in a date range for a specific repository
-     */
-    async getCommitsInRange(repo, since, until) {
-        const commits = [];
-        let page = 1;
-        const perPage = 100;
-        const baseUrl = `https://api.github.com/repos/${this.orgName}/${repo}`;
-
-        while (true) {
-            try {
-                const response = await axios.get(`${baseUrl}/commits`, {
-                    headers: this.headers,
-                    params: {
-                        since: since.toISOString(),
-                        until: until.toISOString(),
-                        per_page: perPage,
-                        page: page
-                    }
-                });
-
-                const pageCommits = response.data;
-
-                if (!pageCommits || pageCommits.length === 0) {
-                    break;
-                }
-
-                commits.push(...pageCommits);
-                page++;
-
-                // If we got less than perPage, we're done
-                if (pageCommits.length < perPage) {
-                    break;
-                }
-            } catch (error) {
-                // Repository might be empty or inaccessible
-                if (error.response && error.response.status === 409) {
-                    // Empty repository
-                    break;
-                }
-                break;
-            }
-        }
-
-        return commits;
-    }
-
-    /**
-     * Get additions and deletions for a specific commit
-     */
-    async getCommitStats(repo, commitSha) {
-        const baseUrl = `https://api.github.com/repos/${this.orgName}/${repo}`;
-        
-        try {
-            const response = await axios.get(`${baseUrl}/commits/${commitSha}`, {
-                headers: this.headers
-            });
-
-            const stats = response.data.stats || {};
-            return {
-                additions: stats.additions || 0,
-                deletions: stats.deletions || 0
-            };
-        } catch (error) {
-            return { additions: 0, deletions: 0 };
-        }
-    }
-
-    /**
-     * Analyze commits for a single repository and return statistics per developer
-     */
-    async analyzeRepoCommits(repo, since, until) {
-        const commits = await this.getCommitsInRange(repo, since, until);
-        
-        if (commits.length === 0) {
-            return {};
-        }
-
-        const devStats = {};
-
-        for (let idx = 0; idx < commits.length; idx++) {
-            if (idx % 10 === 0 && idx > 0) {
-                // Silent processing for multi-repo
-            }
-
-            const commit = commits[idx];
-            const author = commit.commit.author;
-            const authorName = author.name || 'Unknown';
-            const authorEmail = author.email || 'unknown@email.com';
-
-            // Use GitHub login if available, otherwise use name
-            const authorId = commit.author ? commit.author.login : authorName;
-
-            const commitSha = commit.sha;
-            const stats = await this.getCommitStats(repo, commitSha);
-
-            if (!devStats[authorId]) {
-                devStats[authorId] = {
-                    commits: 0,
-                    additions: 0,
-                    deletions: 0,
-                    netLines: 0,
-                    commitShas: [],
-                    email: authorEmail,
-                    name: authorName
-                };
-            }
-
-            devStats[authorId].commits += 1;
-            devStats[authorId].additions += stats.additions;
-            devStats[authorId].deletions += stats.deletions;
-            devStats[authorId].netLines += (stats.additions - stats.deletions);
-            devStats[authorId].commitShas.push(commitSha);
-        }
-
-        return devStats;
-    }
-
-    /**
      * Aggregate statistics across all repositories
      */
     async aggregateStats(period, date = null) {
-        if (!date) {
-            date = new Date();
-        }
-
-        // Calculate date range based on period
-        let startDate, endDate;
-        
-        if (period === 'daily') {
-            startDate = new Date(date);
-            startDate.setHours(0, 0, 0, 0);
-            endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 1);
-        } else if (period === 'weekly') {
-            endDate = new Date(date);
-            endDate.setHours(23, 59, 59, 999);
-            startDate = new Date(date);
-            startDate.setDate(startDate.getDate() - 7);
-            startDate.setHours(0, 0, 0, 0);
-        } else if (period === 'monthly') {
-            endDate = new Date(date);
-            endDate.setHours(23, 59, 59, 999);
-            startDate = new Date(date);
-            startDate.setDate(startDate.getDate() - 30);
-            startDate.setHours(0, 0, 0, 0);
-        } else {
-            // Default to daily
-            startDate = new Date(date);
-            startDate.setHours(0, 0, 0, 0);
-            endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 1);
-        }
-
         // Get list of repositories to track
         const reposToTrack = this.repositories || await this.getAllRepositories();
 
@@ -405,8 +255,7 @@ class MultiRepoTracker {
             return { aggregated: {}, byRepo: {}, allContributors: [] };
         }
 
-        console.log(`🔍 Analyzing ${reposToTrack.length} repositories (DEFAULT BRANCH ONLY)...`);
-        console.log(`📅 Period: ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
+        console.log(`🔍 Analyzing ${reposToTrack.length} repositories...`);
         
         // Show repository list (limit to first 10 if too many)
         if (reposToTrack.length <= 10) {
@@ -440,10 +289,25 @@ class MultiRepoTracker {
 
         for (const repo of reposToTrack) {
             completed++;
-            console.log(`[${completed}/${reposToTrack.length}] Processing: ${repo}...`);
+            console.log(`\n[${completed}/${reposToTrack.length}] Processing: ${repo}...`);
 
             try {
-                const stats = await this.analyzeRepoCommits(repo, startDate, endDate);
+                const tracker = new GitHubDevTracker(this.orgName, repo, this.githubToken);
+
+                let stats;
+                switch (period) {
+                    case 'daily':
+                        stats = await tracker.getDailyReport(date);
+                        break;
+                    case 'weekly':
+                        stats = await tracker.getWeeklyReport(date);
+                        break;
+                    case 'monthly':
+                        stats = await tracker.getMonthlyReport(date);
+                        break;
+                    default:
+                        stats = await tracker.getDailyReport(date);
+                }
 
                 // Store stats by repository
                 statsByRepo[repo] = stats;
@@ -474,8 +338,7 @@ class MultiRepoTracker {
                     }
                 }
 
-                const commitCount = Object.values(stats).reduce((sum, s) => sum + s.commits, 0);
-                console.log(`   ✅ ${repo}: ${Object.keys(stats).length} developers, ${commitCount} commits`);
+                console.log(`   ✅ ${repo}: ${Object.keys(stats).length} developers, ${Object.values(stats).reduce((sum, s) => sum + s.commits, 0)} commits`);
             } catch (error) {
                 console.error(`   ❌ Error processing ${repo}: ${error.message}`);
                 statsByRepo[repo] = {};
@@ -487,7 +350,7 @@ class MultiRepoTracker {
 
     /**
      * Create leaderboard from aggregated stats
-     * Sorted by commits (primary), then net lines (tiebreaker)
+     * FIXED: Sorted by commits (primary), then net lines (tiebreaker)
      */
     createLeaderboard(stats, topN = null) {
         const leaderboard = [];
@@ -527,7 +390,6 @@ class MultiRepoTracker {
 
         console.log('\n' + '='.repeat(90));
         console.log('SoluLab Multi-Repository Contribution Report'.padStart(55));
-        console.log('(DEFAULT BRANCH ONLY)'.padStart(50));
         
         if (period === 'weekly') {
             const endDate = new Date(date);
@@ -640,7 +502,7 @@ class MultiRepoTracker {
         console.log(`Active Developers: ${activeDevs}`);
         console.log(`Inactive Developers: ${inactiveDevs}`);
         console.log(`Total Repositories with Activity: ${activeRepos.size}`);
-        console.log(`Total Commits: ${totalCommits} (default branch only)`);
+        console.log(`Total Commits: ${totalCommits}`);
         console.log(`Total Lines Added: +${totalAdditions}`);
         console.log(`Total Lines Deleted: -${totalDeletions}`);
         console.log(`Net Lines Changed: ${totalNet}`);
@@ -698,6 +560,65 @@ class MultiRepoTracker {
     }
 
     /**
+     * Print detailed contributor breakdown by repository
+     */
+    printContributorBreakdown(statsByRepo) {
+        console.log('\n' + '='.repeat(110));
+        console.log('Detailed Contributor Breakdown by Repository'.padStart(65));
+        console.log('='.repeat(110) + '\n');
+
+        // Get repos with activity (sort by commits)
+        const activeRepos = [];
+        for (const [repo, stats] of Object.entries(statsByRepo)) {
+            const totalCommits = Object.values(stats).reduce((sum, s) => sum + s.commits, 0);
+            if (totalCommits > 0) {
+                activeRepos.push({ repo, stats, totalCommits });
+            }
+        }
+
+        // Sort by total commits (descending)
+        activeRepos.sort((a, b) => b.totalCommits - a.totalCommits);
+
+        // Show breakdown for each active repository
+        activeRepos.forEach(({ repo, stats }, index) => {
+            console.log(`\n${index + 1}. Repository: ${repo}`);
+            console.log('-'.repeat(110));
+
+            const contributorTable = new Table({
+                head: ['Username', 'Name', 'Commits', 'Additions', 'Deletions', 'Net Lines'],
+                colWidths: [20, 25, 10, 15, 15, 15]
+            });
+
+            // Sort contributors by commits
+            const contributors = Object.entries(stats)
+                .map(([username, data]) => ({
+                    username,
+                    name: data.name,
+                    commits: data.commits,
+                    additions: data.additions,
+                    deletions: data.deletions,
+                    netLines: data.additions - data.deletions
+                }))
+                .sort((a, b) => b.commits - a.commits);
+
+            contributors.forEach(c => {
+                contributorTable.push([
+                    c.username,
+                    c.name,
+                    c.commits,
+                    `+${c.additions}`,
+                    `-${c.deletions}`,
+                    c.netLines
+                ]);
+            });
+
+            console.log(contributorTable.toString());
+        });
+
+        console.log('\n' + '='.repeat(110) + '\n');
+    }
+
+    /**
      * Export to JSON
      */
     async exportToJson(aggregated, byRepo, filename) {
@@ -717,7 +638,7 @@ async function main() {
 
     program
         .name('multi-repo-tracker')
-        .description('Track GitHub developer contributions across multiple repositories (DEFAULT BRANCH ONLY)')
+        .description('Track GitHub developer contributions across multiple repositories')
         .requiredOption('--org <organization>', 'GitHub organization name')
         .requiredOption('--token <token>', 'GitHub personal access token')
         .option('--repos <repositories>', 'Comma-separated list of repositories (leave empty for all repos)')

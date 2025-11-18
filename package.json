@@ -23,7 +23,9 @@
     "report:single:daily": "node src/RunReport.js daily",
     "report:single:weekly": "node src/RunReport.js weekly",
     "report:single:monthly": "node src/RunReport.js monthly",
-    "report:single:all": "node src/RunReport.js all"
+    "report:single:all": "node src/RunReport.js all",
+    "dashboard": "node src/server.js",
+    "dev": "nodemon src/server.js"
   },
   "keywords": [
     "github",
@@ -39,9 +41,14 @@
     "axios": "^1.6.2",
     "cli-table3": "^0.6.3",
     "commander": "^11.1.0",
-    "dotenv": "^17.2.3"
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   },
   "engines": {
     "node": ">=14.0.0"
   }
-}
+} 
