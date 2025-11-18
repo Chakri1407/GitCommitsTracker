@@ -3,7 +3,9 @@
 /**
  * Web Dashboard Server for GitHub Developer Tracker
  * Provides API endpoints and serves the dashboard UI
- * Enhanced with 3-level caching: Memory (5min) → File (1hour) → GitHub API
+ * Enhanced with:
+ * - Auto-generates missing reports on startup (PARALLEL)
+ * - 3-level caching: Memory (5min) → File (1hour) → GitHub API
  */
 
 const express = require('express');
@@ -82,12 +84,97 @@ async function getReportFromFile(type, period, date) {
 }
 
 /**
+ * Generate missing reports on startup (PARALLEL for speed)
+ */
+async function generateMissingReports() {
+    const date = new Date();
+    const dateStr = date.toISOString().split('T')[0];
+    const periods = ['daily', 'weekly', 'monthly'];
+    
+    console.log('\n🔍 Checking for missing reports...');
+    
+    // Check which reports need to be generated
+    const missingReports = [];
+    
+    for (const period of periods) {
+        const fileName = `multi_repo_${period}_report_${dateStr}.json`;
+        const filePath = path.join(__dirname, '../reports', period, fileName);
+        
+        try {
+            const stats = await fs.stat(filePath);
+            const ageMinutes = Math.round((Date.now() - stats.mtimeMs) / 60000);
+            
+            if (ageMinutes < 60) {
+                console.log(`  ✅ ${period}: Using existing report (${ageMinutes} min old)`);
+            } else {
+                console.log(`  ⏰ ${period}: Report too old (${ageMinutes} min), will regenerate`);
+                missingReports.push(period);
+            }
+        } catch {
+            console.log(`  ❌ ${period}: No report found, will generate`);
+            missingReports.push(period);
+        }
+    }
+    
+    if (missingReports.length === 0) {
+        console.log('✅ All reports are up to date!\n');
+        return;
+    }
+    
+    // Generate missing reports IN PARALLEL
+    console.log(`\n🚀 Generating ${missingReports.length} report(s) in parallel...`);
+    const startTime = Date.now();
+    
+    const tracker = new MultiRepoTracker(
+        config.github.organization,
+        config.github.token,
+        config.github.repositories
+    );
+    
+    // Run all missing reports at the same time
+    await Promise.all(missingReports.map(async (period) => {
+        console.log(`  🔄 Starting ${period} report...`);
+        
+        try {
+            const { aggregated, byRepo, allContributors } = await tracker.aggregateStats(period, date);
+            
+            // Save to file
+            const fileName = `multi_repo_${period}_report_${dateStr}.json`;
+            const filePath = path.join(__dirname, '../reports', period, fileName);
+            
+            // Ensure directory exists
+            await fs.mkdir(path.dirname(filePath), { recursive: true });
+            
+            const reportData = {
+                period,
+                date: dateStr,
+                aggregated,
+                byRepo,
+                allContributors,
+                totalDevelopers: Object.keys(aggregated).length,
+                totalRepositories: Object.keys(byRepo).length,
+                generatedAt: new Date().toISOString()
+            };
+            
+            await fs.writeFile(filePath, JSON.stringify(reportData, null, 2));
+            console.log(`  ✅ ${period} report saved!`);
+        } catch (error) {
+            console.error(`  ❌ ${period} report failed:`, error.message);
+        }
+    }));
+    
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    console.log(`\n✅ All reports generated in ${elapsed} seconds!\n`);
+}
+
+/**
  * GET /api/report/multi/:period
  */
 app.get('/api/report/multi/:period', async (req, res) => {
     try {
         const { period } = req.params;
         const date = req.query.date ? new Date(req.query.date) : new Date();
+        const forceRefresh = req.query.forceRefresh === 'true';
 
         if (!['daily', 'weekly', 'monthly'].includes(period)) {
             return res.status(400).json({ error: 'Invalid period. Use daily, weekly, or monthly' });
@@ -96,18 +183,23 @@ app.get('/api/report/multi/:period', async (req, res) => {
         const dateStr = date.toISOString().split('T')[0];
         const cacheKey = getCacheKey('multi', period, dateStr);
 
-        // Level 1: Memory cache
-        const cached = getFromCache(cacheKey);
-        if (cached) {
-            console.log(`✅ Memory cache hit for multi ${period}`);
-            return res.json(cached);
-        }
+        // Skip cache if forceRefresh
+        if (!forceRefresh) {
+            // Level 1: Memory cache
+            const cached = getFromCache(cacheKey);
+            if (cached) {
+                console.log(`✅ Memory cache hit for multi ${period}`);
+                return res.json(cached);
+            }
 
-        // Level 2: File cache
-        const fileData = await getReportFromFile('multi', period, date.toISOString());
-        if (fileData) {
-            setCache(cacheKey, fileData);
-            return res.json(fileData);
+            // Level 2: File cache
+            const fileData = await getReportFromFile('multi', period, date.toISOString());
+            if (fileData) {
+                setCache(cacheKey, fileData);
+                return res.json(fileData);
+            }
+        } else {
+            console.log(`🔄 Force refresh requested for ${period}`);
         }
 
         // Level 3: GitHub API
@@ -504,12 +596,59 @@ app.get('/api/cache/status', async (req, res) => {
 
 /**
  * GET /api/cache/clear
+ * Clear memory cache only
  */
 app.get('/api/cache/clear', (req, res) => {
     const size = cache.size;
     cache.clear();
-    console.log(`🗑️  Cache cleared (${size} entries removed)`);
-    res.json({ message: 'Cache cleared successfully', entriesRemoved: size });
+    console.log(`🗑️  Memory cache cleared (${size} entries removed)`);
+    res.json({ message: 'Memory cache cleared successfully', entriesRemoved: size });
+});
+
+/**
+ * GET /api/cache/clear-all
+ * Clear memory cache AND delete all report files
+ */
+app.get('/api/cache/clear-all', async (req, res) => {
+    try {
+        // Clear memory cache
+        const memorySize = cache.size;
+        cache.clear();
+        
+        // Delete all report files
+        let filesDeleted = 0;
+        const periods = ['daily', 'weekly', 'monthly'];
+        
+        for (const period of periods) {
+            try {
+                const reportsDir = path.join(__dirname, '../reports', period);
+                const files = await fs.readdir(reportsDir);
+                const jsonFiles = files.filter(f => f.endsWith('.json'));
+                
+                for (const file of jsonFiles) {
+                    const filePath = path.join(reportsDir, file);
+                    await fs.unlink(filePath);
+                    filesDeleted++;
+                    console.log(`🗑️  Deleted: ${period}/${file}`);
+                }
+            } catch (error) {
+                if (error.code !== 'ENOENT') {
+                    console.log(`⚠️  Error in ${period}: ${error.message}`);
+                }
+            }
+        }
+        
+        console.log(`\n🗑️  Cache cleared: ${memorySize} memory entries, ${filesDeleted} files deleted\n`);
+        
+        res.json({ 
+            message: 'All cache cleared successfully',
+            memoryEntriesRemoved: memorySize,
+            filesDeleted: filesDeleted
+        });
+    } catch (error) {
+        console.error('Error clearing all cache:', error);
+        res.status(500).json({ error: 'Failed to clear cache', message: error.message });
+    }
 });
 
 /**
@@ -543,22 +682,27 @@ app.use((error, req, res, next) => {
     res.status(500).json({ error: 'Internal Server Error', message: error.message });
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log('\n' + '═'.repeat(70));
-    console.log('🚀 GitHub Dashboard with Smart File Caching');
-    console.log('═'.repeat(70));
-    console.log(`📊 Dashboard: http://localhost:${PORT}`);
-    console.log(`🔌 API:       http://localhost:${PORT}/api`);
-    console.log('─'.repeat(70));
-    console.log('💾 Caching: Memory (5min) → File (1hr) → API');
-    console.log(`📁 Reports:  ${path.join(__dirname, '../reports')}`);
-    console.log('─'.repeat(70));
-    console.log(`🏢 Org: ${config.github.organization}`);
-    console.log(`🔑 Token: ${config.github.token ? '✅' : '❌'}`);
-    console.log('═'.repeat(70) + '\n');
-    console.log('💡 Generate reports for instant loading:');
-    console.log('   npm run report:monthly\n');
+// Start server with auto-report generation
+generateMissingReports().then(() => {
+    app.listen(PORT, () => {
+        console.log('═'.repeat(70));
+        console.log('🚀 GitHub Dashboard with Smart File Caching');
+        console.log('═'.repeat(70));
+        console.log(`📊 Dashboard: http://localhost:${PORT}`);
+        console.log(`🔌 API:       http://localhost:${PORT}/api`);
+        console.log('─'.repeat(70));
+        console.log('💾 Caching: Memory (5min) → File (1hr) → API');
+        console.log(`📁 Reports:  ${path.join(__dirname, '../reports')}`);
+        console.log('─'.repeat(70));
+        console.log(`🏢 Org: ${config.github.organization}`);
+        console.log(`🔑 Token: ${config.github.token ? '✅' : '❌'}`);
+        console.log('═'.repeat(70) + '\n');
+    });
+}).catch(error => {
+    console.error('❌ Failed to generate reports:', error);
+    app.listen(PORT, () => {
+        console.log(`📊 Dashboard running at http://localhost:${PORT}`);
+    });
 });
 
 module.exports = app; 

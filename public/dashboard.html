@@ -52,7 +52,7 @@
             display: flex;
             gap: 20px;
             flex-wrap: wrap;
-            align-items: center;
+            align-items: flex-end;
         }
 
         .control-group {
@@ -86,7 +86,7 @@
             border: none;
             cursor: pointer;
             font-weight: 600;
-            padding: 12px 30px;
+            padding: 12px 20px;
         }
 
         button:hover {
@@ -96,6 +96,12 @@
 
         button:active {
             transform: translateY(0);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
         }
 
         .dashboard {
@@ -265,27 +271,6 @@
             font-size: 1.1em;
         }
 
-        .filter-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .filter-tab {
-            padding: 10px 20px;
-            background: #f5f5f5;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-
-        .filter-tab.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
         .repos-indicator {
             display: inline;
             color: #999;
@@ -348,6 +333,11 @@
                 align-items: stretch;
             }
 
+            .button-group {
+                margin-left: 0;
+                flex-wrap: wrap;
+            }
+
             .header h1 {
                 font-size: 1.8em;
             }
@@ -358,7 +348,7 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>📊 SoluLab GitHub Dashboard</h1>
+            <h1>📊 GitHub SoluLab Analytics</h1>
             <p>Real-time Developer Contribution Analytics</p>
         </div>
 
@@ -378,36 +368,35 @@
                 <input type="date" id="date">
             </div>
 
-
-
-            <div class="control-group" style="margin-left: auto;">
-                <label>&nbsp;</label>
-                <button onclick="loadData()">🔄 Refresh Data</button>
+            <div class="button-group">
+                <button onclick="loadData(false)" title="Uses cached data if available (within 1 hour)">📊 Get Cached Data(within 1 hr)</button>
+                <button onclick="loadData(true)" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);" title="Force fetch fresh data from GitHub API">🔄  Generate Latest Data</button>
+                <button onclick="clearAllCache()" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);" title="Clear all cached data and report files">🗑️ Clear All Cache</button>
             </div>
         </div>
 
         <!-- Top & Bottom Contributors -->
         <div class="dashboard">
             <div class="card">
-                <h2>Top 10 Contributors</h2>
-                <div class="filter-tabs">
-                    <button class="filter-tab active" onclick="filterTop('all')">All Users</button>
-                    <button class="filter-tab" onclick="filterTop('unique')">Unique Commits</button>
-                </div>
+                <h2>🏆 Top 10 Contributors</h2>
                 <div id="top-contributors" class="user-list">
                     <div class="loading">Loading top contributors</div>
                 </div>
             </div>
 
             <div class="card bottom">
-                <h2>Bottom Contributors</h2>
-                <div class="filter-tabs">
-                    <button class="filter-tab active" onclick="filterBottom('all')">All Users</button>
-                    <button class="filter-tab" onclick="filterBottom('zero')">Zero Commits Only</button>
-                </div>
+                <h2>📉 Bottom 10 Active Contributors</h2>
                 <div id="bottom-contributors" class="user-list">
                     <div class="loading">Loading bottom contributors</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Inactive Users Section -->
+        <div class="single-user-card" style="margin-bottom: 30px;">
+            <h2>⚠️ Inactive Users (0 Commits)</h2>
+            <div id="inactive-users" class="user-list" style="max-height: 400px; overflow-y: auto;">
+                <div class="loading">Loading inactive users</div>
             </div>
         </div>
 
@@ -418,14 +407,14 @@
             <div style="display: flex; gap: 20px; align-items: flex-end; margin-bottom: 20px;">
                 <div class="control-group user-search-container" style="flex: 1;">
                     <label for="user-search">Search Developer</label>
-                    <input type="text" id="user-search" placeholder="Enter username or name (e.g., Chakri1407 or ChakriN)" 
+                    <input type="text" id="user-search" placeholder="Enter username or name (e.g., Tushar-ba)" 
                            onkeyup="handleUserSearch(event)" onfocus="showSuggestions()">
                     <div id="user-suggestions" class="user-suggestions" style="display: none;"></div>
                 </div>
                 
                 <div class="control-group">
                     <label for="user-period">📅 Show Period</label>
-                    <select id="user-period">
+                    <select id="user-period" onchange="onUserPeriodChange()">
                         <option value="all">All Periods</option>
                         <option value="daily">Daily Only</option>
                         <option value="weekly">Weekly Only</option>
@@ -445,21 +434,25 @@
         document.getElementById('date').valueAsDate = new Date();
 
         let currentData = null;
-        let userSearchCache = {}; // Cache for individual user searches
-        let topFilter = 'all';
-        let bottomFilter = 'all';
+        let userSearchCache = {};
+        let currentSearchedUser = null;
 
-        async function loadData() {
+        async function loadData(forceRefresh = false) {
             const period = document.getElementById('period').value;
             const date = document.getElementById('date').value;
 
-            // Show loading
-            document.getElementById('top-contributors').innerHTML = '<div class="loading">Loading top contributors</div>';
-            document.getElementById('bottom-contributors').innerHTML = '<div class="loading">Loading bottom contributors</div>';
+            const loadingMsg = forceRefresh 
+                ? 'Generating new data from GitHub API' 
+                : 'Loading data';
+            document.getElementById('top-contributors').innerHTML = `<div class="loading">${loadingMsg}</div>`;
+            document.getElementById('bottom-contributors').innerHTML = `<div class="loading">${loadingMsg}</div>`;
+            document.getElementById('inactive-users').innerHTML = `<div class="loading">${loadingMsg}</div>`;
 
             try {
-                // Always use multi-repo (all repositories)
-                const endpoint = `/api/report/multi/${period}?date=${date}`;
+                let endpoint = `/api/report/multi/${period}?date=${date}`;
+                if (forceRefresh) {
+                    endpoint += '&forceRefresh=true';
+                }
 
                 const response = await fetch(endpoint);
                 
@@ -472,31 +465,60 @@
 
                 displayTopContributors(data.aggregated || data);
                 displayBottomContributors(data.aggregated || data);
+                displayInactiveUsers(data.aggregated || data);
             } catch (error) {
                 console.error('Error loading data:', error);
                 const errorHtml = `<div class="error">❌ Error loading data: ${error.message}</div>`;
                 document.getElementById('top-contributors').innerHTML = errorHtml;
                 document.getElementById('bottom-contributors').innerHTML = errorHtml;
+                document.getElementById('inactive-users').innerHTML = errorHtml;
+            }
+        }
+
+        async function clearAllCache() {
+            if (!confirm('This will delete all cached report files and memory cache. You will need to regenerate data. Continue?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/cache/clear-all');
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`✅ Cache cleared!\n\nMemory entries removed: ${result.memoryEntriesRemoved}\nFiles deleted: ${result.filesDeleted}\n\nClick "Get Data" or "Generate New Data" to fetch fresh data.`);
+                    
+                    userSearchCache = {};
+                    currentSearchedUser = null;
+                    currentData = null;
+                    
+                    document.getElementById('top-contributors').innerHTML = '<div class="no-data">Cache cleared. Click "Get Data" to load fresh data.</div>';
+                    document.getElementById('bottom-contributors').innerHTML = '<div class="no-data">Cache cleared. Click "Get Data" to load fresh data.</div>';
+                    document.getElementById('inactive-users').innerHTML = '<div class="no-data">Cache cleared. Click "Get Data" to load fresh data.</div>';
+                    document.getElementById('user-stats').innerHTML = '<div class="no-data">Enter a username to view statistics</div>';
+                } else {
+                    alert(`❌ Error: ${result.message}`);
+                }
+            } catch (error) {
+                alert(`❌ Error clearing cache: ${error.message}`);
             }
         }
 
         function displayTopContributors(data) {
             const container = document.getElementById('top-contributors');
             
-            // Convert to array and sort by commits
             const users = Object.entries(data)
                 .map(([username, stats]) => ({
                     username,
                     name: stats.name,
                     commits: stats.commits,
-                    repositories: stats.repositories || [] // Ensure it's always an array
+                    repositories: stats.repositories || []
                 }))
-                .filter(user => topFilter === 'all' || user.commits > 0)
+                .filter(user => user.commits > 0)
                 .sort((a, b) => b.commits - a.commits)
                 .slice(0, 10);
 
             if (users.length === 0) {
-                container.innerHTML = '<div class="no-data">No contributors found</div>';
+                container.innerHTML = '<div class="no-data">No active contributors found</div>';
                 return;
             }
 
@@ -515,7 +537,6 @@
                     rankEmoji = '🥉';
                 }
 
-                // Format repository names for inline display
                 let repoDisplay = '';
                 if (user.repositories && Array.isArray(user.repositories) && user.repositories.length > 0) {
                     if (user.repositories.length <= 2) {
@@ -530,8 +551,7 @@
                         <div class="rank ${rankClass}">${rankEmoji}</div>
                         <div class="user-info">
                             <div class="user-name">${user.name}</div>
-                            <div class="user-username">@${user.username}<span class="repos-indicator">${repoDisplay}</span>
-                            </div>
+                            <div class="user-username">@${user.username}<span class="repos-indicator">${repoDisplay}</span></div>
                         </div>
                         <div class="commits">
                             ${user.commits}
@@ -545,7 +565,6 @@
         function displayBottomContributors(data) {
             const container = document.getElementById('bottom-contributors');
             
-            // Convert to array and sort by commits (ascending)
             let users = Object.entries(data)
                 .map(([username, stats]) => ({
                     username,
@@ -553,26 +572,16 @@
                     commits: stats.commits,
                     repositories: stats.repositories || []
                 }))
-                .sort((a, b) => a.commits - b.commits);
+                .filter(user => user.commits > 0)
+                .sort((a, b) => a.commits - b.commits)
+                .slice(0, 10);
 
-            // Apply filter
-            if (bottomFilter === 'zero') {
-                users = users.filter(user => user.commits === 0);
-            }
-
-            // Get bottom 10 or all with same lowest value
-            const lowestCommits = users[0]?.commits || 0;
-            const bottomUsers = users.filter(user => 
-                user.commits === lowestCommits || users.indexOf(user) < 10
-            );
-
-            if (bottomUsers.length === 0) {
-                container.innerHTML = '<div class="no-data">No contributors found</div>';
+            if (users.length === 0) {
+                container.innerHTML = '<div class="no-data">No active contributors found</div>';
                 return;
             }
 
-            container.innerHTML = bottomUsers.map((user, index) => {
-                // Format repository names for inline display
+            container.innerHTML = users.map((user, index) => {
                 let repoDisplay = '';
                 if (user.repositories && Array.isArray(user.repositories) && user.repositories.length > 0) {
                     if (user.repositories.length <= 2) {
@@ -580,8 +589,6 @@
                     } else {
                         repoDisplay = ` · ${user.repositories.slice(0, 2).join(', ')} (+${user.repositories.length - 2})`;
                     }
-                } else {
-                    repoDisplay = ' · No activity';
                 }
 
                 return `
@@ -589,8 +596,7 @@
                         <div class="rank">#${index + 1}</div>
                         <div class="user-info">
                             <div class="user-name">${user.name}</div>
-                            <div class="user-username">@${user.username}<span class="repos-indicator">${repoDisplay}</span>
-                            </div>
+                            <div class="user-username">@${user.username}<span class="repos-indicator">${repoDisplay}</span></div>
                         </div>
                         <div class="commits">
                             ${user.commits}
@@ -601,43 +607,47 @@
             }).join('');
         }
 
-        function filterTop(type) {
-            topFilter = type;
+        function displayInactiveUsers(data) {
+            const container = document.getElementById('inactive-users');
             
-            // Update active tab
-            document.querySelectorAll('#top-contributors').forEach(container => {
-                container.closest('.card').querySelectorAll('.filter-tab').forEach(tab => {
-                    tab.classList.remove('active');
-                });
-            });
-            event.target.classList.add('active');
+            const inactiveUsers = Object.entries(data)
+                .map(([username, stats]) => ({
+                    username,
+                    name: stats.name,
+                    commits: stats.commits
+                }))
+                .filter(user => user.commits === 0)
+                .sort((a, b) => a.name.localeCompare(b.name));
 
-            if (currentData) {
-                displayTopContributors(currentData.aggregated || currentData);
+            if (inactiveUsers.length === 0) {
+                container.innerHTML = '<div class="no-data" style="color: #28a745;">✅ All users are active! No inactive users found.</div>';
+                return;
             }
-        }
 
-        function filterBottom(type) {
-            bottomFilter = type;
-            
-            // Update active tab
-            document.querySelectorAll('#bottom-contributors').forEach(container => {
-                container.closest('.card').querySelectorAll('.filter-tab').forEach(tab => {
-                    tab.classList.remove('active');
-                });
-            });
-            event.target.classList.add('active');
-
-            if (currentData) {
-                displayBottomContributors(currentData.aggregated || currentData);
-            }
+            container.innerHTML = `
+                <div style="margin-bottom: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; color: #856404;">
+                    <strong>⚠️ ${inactiveUsers.length} inactive user${inactiveUsers.length > 1 ? 's' : ''}</strong> with 0 commits in this period
+                </div>
+                ${inactiveUsers.map((user, index) => `
+                    <div class="user-item" style="background: #f8f9fa;">
+                        <div class="rank" style="background: #dc3545; color: white; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 0.9em;">${index + 1}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.name}</div>
+                            <div class="user-username">@${user.username}</div>
+                        </div>
+                        <div class="commits" style="color: #dc3545;">
+                            0
+                            <div class="commits-label">commits</div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
         }
 
         function handleUserSearch(event) {
             if (event.key === 'Enter') {
-                searchUser(event);
+                searchUser();
             } else {
-                // Show suggestions as user types
                 showSuggestions();
             }
         }
@@ -651,13 +661,12 @@
                 return;
             }
 
-            // Find matching users
             const matches = Object.entries(currentData.aggregated)
                 .filter(([username, stats]) => {
                     return username.toLowerCase().includes(searchTerm) || 
                            (stats.name && stats.name.toLowerCase().includes(searchTerm));
                 })
-                .slice(0, 5); // Show top 5 matches
+                .slice(0, 5);
 
             if (matches.length === 0) {
                 suggestionsDiv.style.display = 'none';
@@ -677,10 +686,9 @@
         function selectUser(username) {
             document.getElementById('user-search').value = username;
             document.getElementById('user-suggestions').style.display = 'none';
-            searchUser({ key: 'Enter' });
+            searchUser();
         }
 
-        // Close suggestions when clicking outside
         document.addEventListener('click', (e) => {
             const searchContainer = document.querySelector('.user-search-container');
             if (searchContainer && !searchContainer.contains(e.target)) {
@@ -688,93 +696,78 @@
             }
         });
 
-        async function searchUser(event) {
-            if (event.key === 'Enter') {
-                const searchTerm = document.getElementById('user-search').value.trim();
-                
-                if (!searchTerm) {
-                    document.getElementById('user-stats').innerHTML = 
-                        '<div class="no-data">Enter a username to view statistics</div>';
-                    return;
-                }
+        function onUserPeriodChange() {
+            if (currentSearchedUser) {
+                fetchUserData(currentSearchedUser);
+            }
+        }
 
-                // Get selected period for user search
-                const userPeriod = document.getElementById('user-period').value;
-                const date = document.getElementById('date').value;
-                const cacheKey = `${searchTerm}_${date}_${userPeriod}`;
-                
-                // Check cache first
-                if (userSearchCache[cacheKey]) {
-                    console.log('✅ Using cached user data');
-                    displayUserStats(userSearchCache[cacheKey], userPeriod);
-                    return;
-                }
-
+        async function searchUser() {
+            const searchTerm = document.getElementById('user-search').value.trim();
+            
+            if (!searchTerm) {
                 document.getElementById('user-stats').innerHTML = 
-                    '<div class="loading">Loading user statistics</div>';
+                    '<div class="no-data">Enter a username to view statistics</div>';
+                currentSearchedUser = null;
+                return;
+            }
 
-                try {
-                    // First, try to find user in current loaded data
-                    if (currentData && currentData.aggregated) {
-                        const searchLower = searchTerm.toLowerCase();
-                        
-                        // Search by exact username match (case-insensitive)
-                        let foundUser = Object.entries(currentData.aggregated).find(([username, stats]) => 
-                            username.toLowerCase() === searchLower
-                        );
+            let username = searchTerm;
+            
+            if (currentData && currentData.aggregated) {
+                const searchLower = searchTerm.toLowerCase();
+                
+                let foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
+                    u.toLowerCase() === searchLower
+                );
 
-                        // If not found, search by name (case-insensitive)
-                        if (!foundUser) {
-                            foundUser = Object.entries(currentData.aggregated).find(([username, stats]) => 
-                                stats.name && stats.name.toLowerCase() === searchLower
-                            );
-                        }
-
-                        // If found in current data, fetch from API with selected period
-                        if (foundUser) {
-                            const [username] = foundUser;
-                            
-                            // Fetch with selected period
-                            const response = await fetch(`/api/user/${username}?date=${date}&period=${userPeriod}`);
-                            
-                            if (!response.ok) {
-                                throw new Error('User not found or error loading data');
-                            }
-
-                            const data = await response.json();
-                            
-                            // Cache the result
-                            userSearchCache[cacheKey] = data;
-                            
-                            displayUserStats(data, userPeriod);
-                            return;
-                        }
-                    }
-
-                    // If not found in current data, try API directly
-                    const response = await fetch(`/api/user/${searchTerm}?date=${date}&period=${userPeriod}`);
-                    
-                    if (!response.ok) {
-                        throw new Error('User not found. Try searching by their GitHub username');
-                    }
-
-                    const data = await response.json();
-                    
-                    // Cache the result
-                    userSearchCache[cacheKey] = data;
-                    
-                    displayUserStats(data, userPeriod);
-                } catch (error) {
-                    document.getElementById('user-stats').innerHTML = 
-                        `<div class="error">❌ ${error.message}</div>`;
+                if (!foundUser) {
+                    foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
+                        stats.name && stats.name.toLowerCase() === searchLower
+                    );
                 }
+
+                if (foundUser) {
+                    username = foundUser[0];
+                }
+            }
+
+            currentSearchedUser = username;
+            await fetchUserData(username);
+        }
+
+        async function fetchUserData(username) {
+            const userPeriod = document.getElementById('user-period').value;
+            const date = document.getElementById('date').value;
+            const cacheKey = `${username}_${date}_${userPeriod}`;
+            
+            if (userSearchCache[cacheKey]) {
+                displayUserStats(userSearchCache[cacheKey], userPeriod);
+                return;
+            }
+
+            document.getElementById('user-stats').innerHTML = 
+                '<div class="loading">Loading user statistics</div>';
+
+            try {
+                const response = await fetch(`/api/user/${username}?date=${date}&period=${userPeriod}`);
+                
+                if (!response.ok) {
+                    throw new Error('User not found. Try searching by their GitHub username');
+                }
+
+                const data = await response.json();
+                userSearchCache[cacheKey] = data;
+                displayUserStats(data, userPeriod);
+            } catch (error) {
+                document.getElementById('user-stats').innerHTML = 
+                    `<div class="error">❌ ${error.message}</div>`;
             }
         }
 
         function displayUserStats(data, period = 'all') {
             const container = document.getElementById('user-stats');
             
-            // Format repository lists for each period
             const formatRepos = (repos) => {
                 if (!repos || repos.length === 0) return 'No activity';
                 if (repos.length <= 3) return repos.join(', ');
@@ -788,7 +781,6 @@
                 <div class="stats-grid">
             `;
             
-            // Show cards based on selected period
             if (period === 'all' || period === 'daily') {
                 statsHtml += `
                     <div class="stat-card">
@@ -836,7 +828,6 @@
             
             statsHtml += `</div>`;
             
-            // Add repository breakdown for monthly (if showing monthly)
             if ((period === 'all' || period === 'monthly') && data.monthlyDetails?.repositories && data.monthlyDetails.repositories.length > 0) {
                 statsHtml += `
                     <div style="margin-top: 30px; padding: 20px; background: #f5f7fa; border-radius: 10px;">

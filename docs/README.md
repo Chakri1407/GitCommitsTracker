@@ -1,19 +1,23 @@
-# GitHub Developer Contribution Tracker
+# 📊 GitHub SoluLab Analytics
 
-A powerful Node.js tool to track developer contributions across GitHub repositories with beautiful reports, leaderboards, and analytics.
+A powerful Node.js tool to track developer contributions across GitHub repositories with a beautiful web dashboard, reports, leaderboards, and analytics.
 
 ---
 
 ## 🌟 Features
 
+- ✅ **Web Dashboard** - Beautiful real-time analytics dashboard
 - ✅ **Auto-Discovery** - Automatically finds all repositories you have access to
 - ✅ **Multi-Repository Tracking** - Track contributions across multiple repos simultaneously
 - ✅ **Daily/Weekly/Monthly Reports** - Flexible time period reporting
-- ✅ **Top 10 Leaderboards** - Identify top contributors
+- ✅ **Top & Bottom Contributors** - Identify top performers and those needing support
+- ✅ **Inactive Users Tracking** - See who has zero commits
+- ✅ **Individual Developer Stats** - Search and view any developer's contributions
+- ✅ **Smart Caching** - 3-level caching (Memory → File → API) for fast performance
 - ✅ **Repository Breakdown** - See activity per repository
 - ✅ **Branch Support** - Includes commits from all branches (merged or not)
 - ✅ **JSON Export** - Export reports for further analysis
-- ✅ **Simple NPM Commands** - Easy to use with `npm start`
+- ✅ **CLI Commands** - Command-line reports with `npm run report:*`
 - ✅ **Production Ready** - Secure configuration with environment variables
 
 ---
@@ -23,15 +27,17 @@ A powerful Node.js tool to track developer contributions across GitHub repositor
 - [Quick Start](#-quick-start)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
-- [Usage](#-usage)
+- [Web Dashboard](#-web-dashboard)
+- [Dashboard Features](#-dashboard-features)
+- [CLI Usage](#-cli-usage)
 - [Commands Reference](#-commands-reference)
+- [Caching System](#-caching-system)
+- [API Endpoints](#-api-endpoints)
 - [Report Types](#-report-types)
 - [Output Examples](#-output-examples)
-- [Configuration Options](#-configuration-options)
 - [Security Best Practices](#-security-best-practices)
 - [Troubleshooting](#-troubleshooting)
 - [Project Structure](#-project-structure)
-- [Contributing](#-contributing)
 
 ---
 
@@ -59,9 +65,14 @@ Update `.env`:
 GITHUB_TOKEN=ghp_your_github_token_here
 ```
 
-### 4. Run Your First Report
+### 4. Start the Dashboard
 ```bash
-npm start
+npm run dashboard
+```
+
+### 5. Open in Browser
+```
+http://localhost:3000
 ```
 
 That's it! 🎉
@@ -113,18 +124,18 @@ That's it! 🎉
    SHOW_BREAKDOWN=true
    ```
 
-6. **Test installation**
+6. **Start the dashboard**
    ```bash
-   npm start
+   npm run dashboard
    ```
 
 ---
 
 ## ⚙️ Configuration
 
-### Environment Variables (Recommended)
+### Environment Variables
 
-All configuration is now managed through the `.env` file for better security.
+All configuration is managed through the `.env` file for better security.
 
 **.env file:**
 ```env
@@ -173,30 +184,155 @@ GITHUB_ORG=SoluLab
 # Don't set GITHUB_REPOS - it will auto-discover all SoluLab repos
 ```
 
-#### Option 2: All Organizations
-```env
-GITHUB_ORG=
-# Leave empty to discover repos from all organizations
-```
-
-#### Option 3: Specific Repositories
+#### Option 2: Specific Repositories
 ```env
 GITHUB_ORG=SoluLab
 GITHUB_REPOS=rentzy-be-user,rentzy-be-propertyowner,rentzi-admin
-# Comma-separated list of specific repos
 ```
 
 ---
 
-## 🎯 Usage
+## 🖥️ Web Dashboard
+
+### Starting the Dashboard
+
+```bash
+npm run dashboard
+```
+
+This command:
+1. Checks for existing report files
+2. Generates missing reports (daily, weekly, monthly) in parallel
+3. Starts the web server on port 3000
+4. Dashboard available at `http://localhost:3000`
+
+### Expected Output
+
+```
+🔍 Checking for missing reports...
+  ✅ daily: Using existing report (5 min old)
+  ✅ weekly: Using existing report (10 min old)
+  ✅ monthly: Using existing report (15 min old)
+✅ All reports are up to date!
+
+══════════════════════════════════════════════════════════════════════
+🚀 GitHub Dashboard with Smart File Caching
+══════════════════════════════════════════════════════════════════════
+📊 Dashboard: http://localhost:3000
+🔌 API:       http://localhost:3000/api
+──────────────────────────────────────────────────────────────────────
+💾 Caching: Memory (5min) → File (1hr) → API
+📁 Reports:  C:\...\GithubCommitScript\reports
+──────────────────────────────────────────────────────────────────────
+🏢 Org: SoluLab
+🔑 Token: ✅
+══════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 🎯 Dashboard Features
+
+### Control Panel
+
+| Control | Description |
+|---------|-------------|
+| **Time Period** | Select Daily, Weekly, or Monthly |
+| **Date** | Pick any date to view historical data |
+| **Get Cached Data** | Fetch data using cached files (fast) |
+| **Generate Latest Data** | Force fetch fresh data from GitHub API |
+| **Clear All Cache** | Delete all cached files and memory |
+
+### Time Periods Explained
+
+| Period | Date Range | Use Case |
+|--------|------------|----------|
+| Daily | Last 24 hours | Daily standup |
+| Weekly | Last 7 days | Sprint reviews |
+| Monthly | Last 30 days | Monthly reports |
+
+### Dashboard Sections
+
+#### 🏆 Top 10 Contributors
+- Shows users with most commits
+- Gold/Silver/Bronze medals for top 3
+- Displays repositories worked on
+- Only active users (1+ commits)
+
+#### 📉 Bottom 10 Active Contributors
+- Shows users with least commits
+- Helps identify who may need support
+- Only active users (1+ commits)
+
+#### ⚠️ Inactive Users (0 Commits)
+- Lists all users with zero commits
+- Warning banner with count
+- Sorted alphabetically
+
+#### 🔍 Individual Developer Stats
+- Search by username or name
+- Auto-suggestions as you type
+- View Daily/Weekly/Monthly stats
+- See additions, deletions, and repos
+
+### Buttons Explained
+
+| Button | Action | When to Use |
+|--------|--------|-------------|
+| **📊 Get Cached Data** | Uses cache (Memory → File → API) | Regular viewing |
+| **🔄 Generate Latest Data** | Skips cache, fetches from API | After new commits |
+| **🗑️ Clear All Cache** | Deletes all cached data | After token change |
+
+---
+
+## 💾 Caching System
+
+The dashboard uses a 3-level caching system:
+
+### Level 1: Memory Cache (5 minutes)
+- Fastest access
+- Stores recent API responses
+- Clears on server restart
+
+### Level 2: File Cache (1 hour)
+- JSON files in `reports/` folder
+- Generated on startup
+- Persists across restarts
+
+### Level 3: GitHub API
+- Always current data
+- Slowest (30-60 seconds)
+- Used when caches miss
+
+### Cache Flow
+
+```
+Request → Memory (5min) → File (1hr) → GitHub API
+```
+
+### Cache File Locations
+
+```
+reports/
+├── daily/
+│   └── multi_repo_daily_report_2025-11-18.json
+├── weekly/
+│   └── multi_repo_weekly_report_2025-11-18.json
+└── monthly/
+    └── multi_repo_monthly_report_2025-11-18.json
+```
+
+---
+
+## 💻 CLI Usage
 
 ### Simple Commands
 
 ```bash
-# Default: Multi-repo daily report
-npm start
+# Start web dashboard
+npm run dashboard
 
-# Multi-repository reports
+# Multi-repository reports (CLI)
 npm run report:daily          # Today's activity
 npm run report:weekly         # Last 7 days
 npm run report:monthly        # Last 30 days
@@ -209,7 +345,7 @@ npm run report:single:monthly
 npm run report:single:all
 ```
 
-### Direct Commands (Alternative)
+### Direct Commands
 
 ```bash
 # Multi-repo
@@ -227,40 +363,89 @@ node src/RunReport.js monthly
 
 ## 📚 Commands Reference
 
-| Command | Description | Reports On |
-|---------|-------------|------------|
-| `npm start` | Default daily report | All repos (auto-discover) |
-| `npm run report:daily` | Daily activity | All repos |
-| `npm run report:weekly` | Last 7 days | All repos |
-| `npm run report:monthly` | Last 30 days | All repos |
+| Command | Description | Output |
+|---------|-------------|--------|
+| `npm run dashboard` | Start web dashboard | http://localhost:3000 |
+| `npm run report:daily` | Daily CLI report | All repos |
+| `npm run report:weekly` | Weekly CLI report | All repos |
+| `npm run report:monthly` | Monthly CLI report | All repos |
 | `npm run report:all` | All three reports | All repos |
-| `npm run report:single:daily` | Daily activity | Single repo |
-| `npm run report:single:weekly` | Last 7 days | Single repo |
-| `npm run report:single:monthly` | Last 30 days | Single repo |
+| `npm run report:single:daily` | Daily single repo | One repo |
+| `npm run report:single:weekly` | Weekly single repo | One repo |
+| `npm run report:single:monthly` | Monthly single repo | One repo |
+
+---
+
+## 🔌 API Endpoints
+
+The dashboard server provides these REST API endpoints:
+
+### Reports
+
+```
+GET /api/report/multi/:period
+GET /api/report/single/:period
+```
+
+**Parameters:**
+- `period`: `daily`, `weekly`, or `monthly`
+- `date`: YYYY-MM-DD format (optional)
+- `forceRefresh`: `true` to skip cache (optional)
+
+**Example:**
+```
+GET /api/report/multi/monthly?date=2025-11-18
+GET /api/report/multi/weekly?forceRefresh=true
+```
+
+### User Stats
+
+```
+GET /api/user/:username
+```
+
+**Parameters:**
+- `username`: GitHub username
+- `date`: YYYY-MM-DD format (optional)
+- `period`: `all`, `daily`, `weekly`, or `monthly` (optional)
+
+**Example:**
+```
+GET /api/user/Tushar-ba?date=2025-11-18&period=all
+```
+
+### Cache Management
+
+```
+GET /api/cache/status      # View cache status
+GET /api/cache/clear       # Clear memory cache
+GET /api/cache/clear-all   # Clear all caches + files
+```
+
+### Health Check
+
+```
+GET /api/health
+```
 
 ---
 
 ## 📊 Report Types
 
 ### Daily Report
-- **Time Period:** Today only (00:00 - 23:59)
-- **Best For:** Daily standup meetings, quick activity check
+- **Time Period:** Last 24 hours
+- **Best For:** Daily standup meetings
 - **Command:** `npm run report:daily`
 
 ### Weekly Report
-- **Time Period:** Last 7 days from today
-- **Best For:** Sprint reviews, weekly team meetings
+- **Time Period:** Last 7 days
+- **Best For:** Sprint reviews
 - **Command:** `npm run report:weekly`
 
 ### Monthly Report
-- **Time Period:** Last 30 days from today
-- **Best For:** Performance reviews, monthly reports
+- **Time Period:** Last 30 days
+- **Best For:** Performance reviews
 - **Command:** `npm run report:monthly`
-
-### All Reports
-- **Generates:** Daily + Weekly + Monthly
-- **Best For:** Comprehensive analysis
-- **Command:** `npm run report:all`
 
 ---
 
@@ -271,31 +456,33 @@ node src/RunReport.js monthly
 ```
 ═══════════════════════════════════════════════════════════════════════════════
             SoluLab Multi-Repository Contribution Report
-DAILY REPORT - 2025-11-13
+DAILY REPORT - 2025-11-18
 ═══════════════════════════════════════════════════════════════════════════════
 
 📋 Auto-discovering repositories you have access to...
-✅ Found 13 repositories in SoluLab
+✅ Found 42 repositories in SoluLab
 
 ┌──────┬──────────────┬───────┬──────────┬────────────┬────────────┬───────────┐
 │ Rank │ Username     │ Repos │ Commits  │ Additions  │ Deletions  │ Net Lines │
 ├──────┼──────────────┼───────┼──────────┼────────────┼────────────┼───────────┤
-│ 1    │ john-doe     │ 5     │ 28       │ +2,450     │ -890       │ 1,560     │
-│ 2    │ jane-smith   │ 3     │ 18       │ +1,320     │ -450       │ 870       │
-│ 3    │ dev-kumar    │ 4     │ 15       │ +980       │ -320       │ 660       │
+│ 1    │ Tushar-ba    │ 1     │ 52       │ +70,490    │ -11,018    │ 59,472    │
+│ 2    │ abhishek     │ 3     │ 25       │ +20,532    │ -1,234     │ 19,298    │
+│ 3    │ SagarPrajapti│ 1     │ 24       │ +12,901    │ -4,065     │ 8,836     │
 └──────┴──────────────┴───────┴──────────┴────────────┴────────────┴───────────┘
 
-🏆 Top Contributor: john-doe
-   Repositories: rentzy-be-user, rentzi-admin, EcoYield-energy-be, ...
+🏆 Top Contributor: Tushar-ba
+   Total Commits: 52
+   Repositories: nft-wallet-ecosystem-be
 
                                    SUMMARY
 --------------------------------------------------------------------------------
-Total Repositories with Activity: 8
-Total Developers Active: 15
-Total Commits: 127
-Total Lines Added: +15,680
-Total Lines Deleted: -4,230
-Net Lines Changed: 11,450
+Total Repositories with Activity: 4
+Total Developers Active: 8
+Inactive Developers: 98
+Total Commits: 115
+Total Lines Added: +110,992
+Total Lines Deleted: -16,811
+Net Lines Changed: 94,181
 --------------------------------------------------------------------------------
 ```
 
@@ -309,63 +496,18 @@ Net Lines Changed: 11,450
 ┌────────────────────────────┬────────────┬──────────┬────────────┬───────────┐
 │ Repository                 │ Developers │ Commits  │ Additions  │ Net Lines │
 ├────────────────────────────┼────────────┼──────────┼────────────┼───────────┤
-│ rentzy-be-user             │ 8          │ 45       │ +5,230     │ 3,780     │
-│ EcoYield-energy-be         │ 6          │ 32       │ +4,120     │ 3,140     │
-│ rentzy-be-propertyowner    │ 5          │ 25       │ +3,450     │ 2,560     │
-│ rentzi-admin               │ 4          │ 15       │ +1,880     │ 1,320     │
+│ nft-wallet-ecosystem-be    │ 1          │ 52       │ +70,490    │ 59,472    │
+│ carbon-credit-backend      │ 4          │ 28       │ +24,362    │ 23,573    │
+│ NFT-wallet-ecosystem-fe    │ 2          │ 26       │ +15,452    │ 10,922    │
+│ CARBON-CREDIT-INVESTOR-FE  │ 5          │ 9        │ +688       │ 214       │
 └────────────────────────────┴────────────┴──────────┴────────────┴───────────┘
-```
-
----
-
-## 🔧 Configuration Options
-
-### Report Settings
-
-Edit your `.env` file:
-
-```env
-# Default period when running 'npm start'
-DEFAULT_PERIOD=all              # Options: daily, weekly, monthly, all
-
-# Number of top contributors to show
-LEADERBOARD_SIZE=10             # Range: 1-100
-
-# Export reports to JSON files
-EXPORT_JSON=true                # Options: true, false
-
-# Show inactive developers report (single repo only)
-SHOW_INACTIVE=true              # Options: true, false
-
-# Show breakdown by repository (multi repo only)
-SHOW_BREAKDOWN=true             # Options: true, false
-```
-
-### GitHub Settings
-
-```env
-# Organization to filter (or leave empty for all)
-GITHUB_ORG=SoluLab
-
-# Single repository for RunReport.js
-GITHUB_REPO=rentzi-admin
-
-# Multiple repositories (comma-separated) or leave empty for auto-discover
-GITHUB_REPOS=
-
-# GitHub Personal Access Token
-GITHUB_TOKEN=ghp_your_token_here
 ```
 
 ---
 
 ## 🔒 Security Best Practices
 
-### Using Environment Variables (Recommended)
-
-The project now uses `.env` files for all configuration, which keeps your token secure.
-
-**Setup:**
+### Using Environment Variables
 
 1. **Create `.env` file:**
    ```bash
@@ -377,54 +519,30 @@ The project now uses `.env` files for all configuration, which keeps your token 
    GITHUB_TOKEN=ghp_your_token_here
    ```
 
-3. **Verify `.gitignore`:**
-   Make sure `.env` is listed (it already is by default):
+3. **Verify `.gitignore` includes:**
    ```
    .env
    .env.local
    .env.production
    ```
 
-### What Gets Committed to Git
+### What Gets Committed
 
 ✅ **Safe to commit:**
-- `.env.example` - Template with no real secrets
-- `config/Config.js` - Reads from environment variables
-- `config/Config.example.js` - Configuration template
+- `.env.example` - Template without secrets
+- `config/Config.js` - Reads from environment
 
 ❌ **NEVER commit:**
 - `.env` - Contains your actual token
-- Any file with real tokens or secrets
 
 ### Token Best Practices
 
-- ✅ Use tokens with minimum required permissions (`repo` scope only)
+- ✅ Use minimum required permissions (`repo` scope)
 - ✅ Set expiration date (90 days recommended)
 - ✅ Rotate tokens regularly
-- ✅ Store in `.env` file (never hardcode)
-- ✅ Keep `.env` in `.gitignore`
+- ✅ Store in `.env` file only
 - ❌ Don't share tokens in Slack/email
-- ❌ Don't use tokens without expiration
 - ❌ Don't commit `.env` to git
-
-### Environment Variables Reference
-
-```env
-# Required
-GITHUB_TOKEN=ghp_xxxxx          # Your GitHub Personal Access Token
-
-# Organization settings
-GITHUB_ORG=SoluLab              # Filter by organization (or leave empty)
-GITHUB_REPO=rentzi-admin        # Default repo for single-repo reports
-GITHUB_REPOS=                   # Specific repos (comma-separated) or empty for auto-discover
-
-# Report settings
-DEFAULT_PERIOD=all              # daily, weekly, monthly, or all
-LEADERBOARD_SIZE=10             # Number of top developers to show
-EXPORT_JSON=true                # Export to JSON files
-SHOW_INACTIVE=true              # Show inactive developers
-SHOW_BREAKDOWN=true             # Show repository breakdown
-```
 
 ---
 
@@ -432,94 +550,45 @@ SHOW_BREAKDOWN=true             # Show repository breakdown
 
 ### Issue: 401 Bad Credentials
 
-**Error:**
-```
-Error fetching commits: Request failed with status code 401
-Status: 401
-Data: { message: 'Bad credentials' }
-```
-
-**Causes:**
-1. Token is invalid or expired
-2. Token missing from config
-3. Token doesn't have `repo` scope
-
 **Solution:**
 1. Generate new token: https://github.com/settings/tokens
 2. Select `repo` scope
-3. Update `config/Config.js` with new token
-4. Test: `npm start`
+3. Update `.env` with new token
+4. Click "Clear All Cache" in dashboard
+5. Click "Generate Latest Data"
 
----
-
-### Issue: 404 Not Found
-
-**Error:**
-```
-Error fetching commits: Request failed with status code 404
-```
-
-**Causes:**
-1. Repository name is wrong
-2. You don't have access to the repository
-3. Organization name is wrong
+### Issue: Old Data After Token Change
 
 **Solution:**
-1. Check spelling of organization and repository names (case-sensitive)
-2. Verify you have access to the repositories
-3. Test with auto-discovery: `repositories: null`
+1. Click "🗑️ Clear All Cache" button
+2. Click "🔄 Generate Latest Data"
 
----
+### Issue: Slow Loading for Past Dates
+
+**Explanation:** Past dates don't have cached files.
+
+**Solution:** Wait for API fetch (30-60 seconds). This is expected.
+
+### Issue: "User not found"
+
+**Solution:**
+1. Check exact GitHub username (case-sensitive)
+2. Ensure user has commits in selected period
+3. Try username, not display name
+
+### Issue: API Rate Limit
+
+**Solution:**
+1. Wait 1 hour for reset
+2. Use cached data when possible
+3. Reduce "Generate Latest Data" clicks
 
 ### Issue: No Repositories Found
-
-**Error:**
-```
-✅ Found 0 repositories
-```
-
-**Causes:**
-1. Token doesn't have access to any repositories
-2. Organization name filter excludes all repos
-3. Token scope is incorrect
 
 **Solution:**
 1. Verify token has `repo` scope
 2. Check organization name spelling
-3. Try `organization: null` to see all accessible repos
-4. Ensure you're a member of the organization
-
----
-
-### Issue: Script is Slow
-
-**Symptom:** Takes several minutes to complete
-
-**Causes:**
-1. Processing many repositories
-2. Many commits to analyze
-3. Network latency
-
-**Solutions:**
-1. Use specific repository list instead of auto-discover
-2. Run during off-peak hours
-3. Process fewer repositories at a time
-4. Consider caching results
-
----
-
-### Issue: API Rate Limit
-
-**Error:**
-```
-Error: API rate limit exceeded
-```
-
-**Solution:**
-1. Wait 1 hour for rate limit to reset
-2. Use authenticated requests (token)
-3. Reduce number of repositories processed
-4. Run less frequently
+3. Ensure you're a member of the organization
 
 ---
 
@@ -530,30 +599,28 @@ GithubCommitScript/
 ├── src/                                # Source code
 │   ├── GitHubDevTracker.js            # Core single-repo tracker
 │   ├── MultiRepoTracker.js            # Core multi-repo tracker
-│   ├── RunReport.js                   # Single repo runner
-│   └── RunMultiRepoReport.js          # Multi repo runner
+│   ├── server.js                      # Express server + API
+│   ├── RunReport.js                   # Single repo CLI runner
+│   └── RunMultiRepoReport.js          # Multi repo CLI runner
+│
+├── public/                             # Web dashboard
+│   └── dashboard.html                 # Dashboard UI
 │
 ├── config/                             # Configuration
 │   ├── Config.js                      # Reads from .env
-│   └── Config.example.js              # Config template (optional)
+│   └── Config.example.js              # Config template
 │
 ├── reports/                            # Generated reports
-│   ├── daily/                         # Daily reports
-│   ├── weekly/                        # Weekly reports
-│   └── monthly/                       # Monthly reports
-│
-├── logs/                               # Log files (if used)
-│
-├── docs/                               # Documentation
-│   ├── README.md                      # This file
-│   ├── Quickstart.md                  # Quick start guide
-│   └── TROUBLESHOOTING.md             # Problem solving guide
+│   ├── daily/                         # Daily report files
+│   ├── weekly/                        # Weekly report files
+│   └── monthly/                       # Monthly report files
 │
 ├── .env                                # Your secrets (NOT committed)
 ├── .env.example                        # Template (safe to commit)
 ├── .gitignore                          # Git ignore rules
-├── package.json                        # Node.js configuration
-└── package-lock.json                   # Dependency lock file
+├── package.json                        # Dependencies & scripts
+├── README.md                           # This file
+└── SETUP.md                            # Detailed setup guide
 ```
 
 ---
@@ -564,20 +631,13 @@ GithubCommitScript/
 
 - ✅ **`repo`** - Full control of private repositories
 
-This includes:
-- `repo:status` - Access commit status
-- `repo_deployment` - Access deployment status
-- `public_repo` - Access public repositories
-- `repo:invite` - Access repository invitations
-- `security_events` - Read security events
-
 ### Getting a Token
 
 1. Visit: https://github.com/settings/tokens
 2. Click "Generate new token (classic)"
 3. Name: `SoluLab Dev Tracker`
 4. Expiration: 90 days (recommended)
-5. Select: ✅ **repo** (check all sub-boxes)
+5. Select: ✅ **repo**
 6. Click "Generate token"
 7. Copy token immediately
 
@@ -588,38 +648,25 @@ This includes:
 ### Change Leaderboard Size
 
 ```env
-# In .env file
-LEADERBOARD_SIZE=20  # Show top 20 instead of 10
+LEADERBOARD_SIZE=20  # Show top 20
 ```
 
 ### Disable JSON Export
 
 ```env
-# In .env file
 EXPORT_JSON=false
 ```
 
 ### Change Default Period
 
 ```env
-# In .env file
-DEFAULT_PERIOD=weekly  # npm start will run weekly report
+DEFAULT_PERIOD=weekly
 ```
 
-### Track Specific Repositories Only
+### Track Specific Repositories
 
 ```env
-# In .env file
-GITHUB_ORG=SoluLab
 GITHUB_REPOS=rentzy-be-user,rentzy-be-propertyowner,rentzi-admin
-```
-
-### Track All Organizations
-
-```env
-# In .env file
-GITHUB_ORG=
-# Leave empty to track repos from all organizations you have access to
 ```
 
 ---
@@ -634,8 +681,8 @@ GITHUB_ORG=
 4. Trigger: Daily at 6:00 PM
 5. Action: Start a program
    - Program: `node`
-   - Arguments: `C:\path\to\src\RunMultiRepoReport.js daily`
-   - Start in: `C:\path\to\project`
+   - Arguments: `src\RunMultiRepoReport.js daily`
+   - Start in: `C:\path\to\GithubCommitScript`
 
 ### Automation with Cron (Linux/Mac)
 
@@ -651,20 +698,12 @@ crontab -e
 
 ## 💡 Tips & Tricks
 
-### Tip 1: Auto-Discovery
-Set `repositories: null` to automatically track all repos without manual listing.
-
-### Tip 2: Organization Filter
-Set `organization: 'SoluLab'` to only track work repositories.
-
-### Tip 3: Regular Reports
-Use `npm start` for daily quick checks.
-
-### Tip 4: Comprehensive Analysis
-Use `npm run report:all` for complete monthly reviews.
-
-### Tip 5: Branch Tracking
-The tool tracks commits from ALL branches, not just main/master.
+1. **Daily use:** Click "Get Cached Data" for fast results
+2. **After commits:** Click "Generate Latest Data" for fresh data
+3. **After token change:** Click "Clear All Cache" then "Generate Latest Data"
+4. **Monthly reviews:** Use "Monthly" period for comprehensive reports
+5. **Team meetings:** Use "Weekly" period for sprint reviews
+6. **Individual reviews:** Use the search feature for specific developers
 
 ---
 
@@ -673,23 +712,30 @@ The tool tracks commits from ALL branches, not just main/master.
 ### Common Issues
 See [Troubleshooting](#-troubleshooting) section above.
 
+### Documentation
+- `README.md` - This file
+- `SETUP.md` - Detailed setup guide
+
 ### GitHub API Documentation
 https://docs.github.com/en/rest
-
-### Token Management
-https://github.com/settings/tokens
 
 ---
 
 ## 📄 License
 
-MIT License - Feel free to modify and use for your organization.
+Proprietary - SoluLab Internal Use
 
 ---
 
 ## 🙏 Acknowledgments
 
 Built for SoluLab development team to track and celebrate developer contributions.
+
+---
+
+**Version:** 2.0.0  
+**Last Updated:** November 2025  
+**Author:** SoluLab Development Team
 
 ---
 
