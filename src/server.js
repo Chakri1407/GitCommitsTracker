@@ -6,6 +6,7 @@
  * Enhanced with:
  * - Auto-generates missing reports on startup (PARALLEL)
  * - 3-level caching: Memory (5min) → File (1hour) → GitHub API
+ * - Smart user lookup: checks all period caches before API
  */
 
 const express = require('express');
@@ -93,7 +94,6 @@ async function generateMissingReports() {
     
     console.log('\n🔍 Checking for missing reports...');
     
-    // Check which reports need to be generated
     const missingReports = [];
     
     for (const period of periods) {
@@ -102,7 +102,7 @@ async function generateMissingReports() {
         
         try {
             const stats = await fs.stat(filePath);
-            const ageMinutes = Math.round((Date.now() - stats.mtimeMs) / 60000);
+            const ageMinutes = Math.round((Date.Now() - stats.mtimeMs) / 60000);
             
             if (ageMinutes < 60) {
                 console.log(`  ✅ ${period}: Using existing report (${ageMinutes} min old)`);
@@ -121,7 +121,6 @@ async function generateMissingReports() {
         return;
     }
     
-    // Generate missing reports IN PARALLEL
     console.log(`\n🚀 Generating ${missingReports.length} report(s) in parallel...`);
     const startTime = Date.now();
     
@@ -131,18 +130,15 @@ async function generateMissingReports() {
         config.github.repositories
     );
     
-    // Run all missing reports at the same time
     await Promise.all(missingReports.map(async (period) => {
         console.log(`  🔄 Starting ${period} report...`);
         
         try {
             const { aggregated, byRepo, allContributors } = await tracker.aggregateStats(period, date);
             
-            // Save to file
             const fileName = `multi_repo_${period}_report_${dateStr}.json`;
             const filePath = path.join(__dirname, '../reports', period, fileName);
             
-            // Ensure directory exists
             await fs.mkdir(path.dirname(filePath), { recursive: true });
             
             const reportData = {
@@ -183,16 +179,13 @@ app.get('/api/report/multi/:period', async (req, res) => {
         const dateStr = date.toISOString().split('T')[0];
         const cacheKey = getCacheKey('multi', period, dateStr);
 
-        // Skip cache if forceRefresh
         if (!forceRefresh) {
-            // Level 1: Memory cache
             const cached = getFromCache(cacheKey);
             if (cached) {
                 console.log(`✅ Memory cache hit for multi ${period}`);
                 return res.json(cached);
             }
 
-            // Level 2: File cache
             const fileData = await getReportFromFile('multi', period, date.toISOString());
             if (fileData) {
                 setCache(cacheKey, fileData);
@@ -202,7 +195,6 @@ app.get('/api/report/multi/:period', async (req, res) => {
             console.log(`🔄 Force refresh requested for ${period}`);
         }
 
-        // Level 3: GitHub API
         console.log(`🔍 Fetching multi-repo ${period} report for ${dateStr}...`);
 
         const tracker = new MultiRepoTracker(
@@ -248,14 +240,12 @@ app.get('/api/report/single/:period', async (req, res) => {
         const dateStr = date.toISOString().split('T')[0];
         const cacheKey = getCacheKey('single', period, dateStr, repo);
 
-        // Level 1: Memory cache
         const cached = getFromCache(cacheKey);
         if (cached) {
             console.log(`✅ Memory cache hit for ${repo} ${period}`);
             return res.json(cached);
         }
 
-        // Level 2: File cache
         const fileData = await getReportFromFile('single', period, date.toISOString());
         if (fileData && fileData.repository === repo) {
             console.log(`✅ Using file cache for ${repo}`);
@@ -263,7 +253,6 @@ app.get('/api/report/single/:period', async (req, res) => {
             return res.json(fileData);
         }
 
-        // Level 3: GitHub API
         console.log(`🔍 Fetching ${repo} ${period} report for ${dateStr}...`);
 
         const tracker = new GitHubDevTracker(
@@ -304,6 +293,7 @@ app.get('/api/report/single/:period', async (req, res) => {
 
 /**
  * GET /api/user/:username
+ * OPTIMIZED: Checks ALL period caches before hitting API
  */
 app.get('/api/user/:username', async (req, res) => {
     try {
@@ -321,47 +311,53 @@ app.get('/api/user/:username', async (req, res) => {
             return res.json(cached);
         }
 
-        // Level 2: Extract from file cache
-        console.log(`🔍 Looking for ${username} in cached report files...`);
+        // Level 2: Check ALL file caches (not just requested period)
+        // This avoids hitting API when user exists in other periods
+        console.log(`🔍 Looking for ${username} in ALL cached report files...`);
         
         let dailyData = null;
         let weeklyData = null;
         let monthlyData = null;
-        let foundInFiles = false;
+        let userExistsAnywhere = false;
+        let userName = username;
+        let userEmail = '';
 
-        if (period === 'all' || period === 'daily') {
-            const dailyFile = await getReportFromFile('multi', 'daily', date.toISOString());
-            if (dailyFile && dailyFile.aggregated && dailyFile.aggregated[username]) {
-                dailyData = dailyFile.aggregated[username];
-                foundInFiles = true;
-                console.log(`  ✅ Found ${username} in daily file cache`);
-            }
+        // Always check ALL three caches to confirm user exists
+        const dailyFile = await getReportFromFile('multi', 'daily', date.toISOString());
+        if (dailyFile && dailyFile.aggregated && username in dailyFile.aggregated) {
+            userExistsAnywhere = true;
+            dailyData = dailyFile.aggregated[username];
+            userName = dailyData.name || username;
+            userEmail = dailyData.email || '';
+            console.log(`  ✅ Found ${username} in daily cache`);
         }
 
-        if (period === 'all' || period === 'weekly') {
-            const weeklyFile = await getReportFromFile('multi', 'weekly', date.toISOString());
-            if (weeklyFile && weeklyFile.aggregated && weeklyFile.aggregated[username]) {
-                weeklyData = weeklyFile.aggregated[username];
-                foundInFiles = true;
-                console.log(`  ✅ Found ${username} in weekly file cache`);
-            }
+        const weeklyFile = await getReportFromFile('multi', 'weekly', date.toISOString());
+        if (weeklyFile && weeklyFile.aggregated && username in weeklyFile.aggregated) {
+            userExistsAnywhere = true;
+            weeklyData = weeklyFile.aggregated[username];
+            userName = weeklyData.name || userName;
+            userEmail = weeklyData.email || userEmail;
+            console.log(`  ✅ Found ${username} in weekly cache`);
         }
 
-        if (period === 'all' || period === 'monthly') {
-            const monthlyFile = await getReportFromFile('multi', 'monthly', date.toISOString());
-            if (monthlyFile && monthlyFile.aggregated && monthlyFile.aggregated[username]) {
-                monthlyData = monthlyFile.aggregated[username];
-                foundInFiles = true;
-                console.log(`  ✅ Found ${username} in monthly file cache`);
-            }
+        const monthlyFile = await getReportFromFile('multi', 'monthly', date.toISOString());
+        if (monthlyFile && monthlyFile.aggregated && username in monthlyFile.aggregated) {
+            userExistsAnywhere = true;
+            monthlyData = monthlyFile.aggregated[username];
+            userName = monthlyData.name || userName;
+            userEmail = monthlyData.email || userEmail;
+            console.log(`  ✅ Found ${username} in monthly cache`);
         }
 
-        // Return from files if found
-        if (foundInFiles) {
+        // If user exists in ANY cache, return data from caches (no API call!)
+        if (userExistsAnywhere) {
+            console.log(`  ✅ User ${username} found in cache - no API call needed!`);
+            
             const response = {
                 username,
-                name: dailyData?.name || weeklyData?.name || monthlyData?.name || username,
-                email: dailyData?.email || weeklyData?.email || monthlyData?.email || '',
+                name: userName,
+                email: userEmail,
                 date: dateStr,
                 period,
                 daily: dailyData?.commits || 0,
@@ -395,8 +391,8 @@ app.get('/api/user/:username', async (req, res) => {
             return res.json(response);
         }
 
-        // Level 3: GitHub API
-        console.log(`🔍 Fetching stats for user: ${username} (${period}) from GitHub API...`);
+        // Level 3: User not in any cache - must fetch from GitHub API
+        console.log(`🔍 User ${username} not in cache - fetching from GitHub API...`);
 
         const tracker = new MultiRepoTracker(
             config.github.organization,
@@ -420,11 +416,15 @@ app.get('/api/user/:username', async (req, res) => {
             monthlyResult = await tracker.aggregateStats('monthly', date);
         }
 
-        const dailyStats = dailyResult?.aggregated[username];
-        const weeklyStats = weeklyResult?.aggregated[username];
-        const monthlyStats = monthlyResult?.aggregated[username];
+        const userExistsInDaily = dailyResult?.aggregated && username in dailyResult.aggregated;
+        const userExistsInWeekly = weeklyResult?.aggregated && username in weeklyResult.aggregated;
+        const userExistsInMonthly = monthlyResult?.aggregated && username in monthlyResult.aggregated;
 
-        if (!dailyStats && !weeklyStats && !monthlyStats) {
+        const dailyStats = dailyResult?.aggregated?.[username];
+        const weeklyStats = weeklyResult?.aggregated?.[username];
+        const monthlyStats = monthlyResult?.aggregated?.[username];
+
+        if (!userExistsInDaily && !userExistsInWeekly && !userExistsInMonthly) {
             return res.status(404).json({ 
                 error: 'User not found',
                 message: `No contributions found for user: ${username}`
@@ -596,7 +596,6 @@ app.get('/api/cache/status', async (req, res) => {
 
 /**
  * GET /api/cache/clear
- * Clear memory cache only
  */
 app.get('/api/cache/clear', (req, res) => {
     const size = cache.size;
@@ -607,15 +606,12 @@ app.get('/api/cache/clear', (req, res) => {
 
 /**
  * GET /api/cache/clear-all
- * Clear memory cache AND delete all report files
  */
 app.get('/api/cache/clear-all', async (req, res) => {
     try {
-        // Clear memory cache
         const memorySize = cache.size;
         cache.clear();
         
-        // Delete all report files
         let filesDeleted = 0;
         const periods = ['daily', 'weekly', 'monthly'];
         
@@ -705,4 +701,4 @@ generateMissingReports().then(() => {
     });
 });
 
-module.exports = app; 
+module.exports = app;

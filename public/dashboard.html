@@ -714,12 +714,19 @@
 
             let username = searchTerm;
             
-            if (currentData && currentData.aggregated) {
-                const searchLower = searchTerm.toLowerCase();
-                
-                let foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
-                    u.toLowerCase() === searchLower
-                );
+           if (currentData && currentData.aggregated) {
+    // First try EXACT case-sensitive match
+    let foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
+        u === searchTerm
+    );
+    
+    // If not found, try case-insensitive match
+    if (!foundUser) {
+        const searchLower = searchTerm.toLowerCase();
+        foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
+            u.toLowerCase() === searchLower
+        );
+    } 
 
                 if (!foundUser) {
                     foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
