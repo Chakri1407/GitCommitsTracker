@@ -3,7 +3,7 @@
 /**
  * Multi-Repository GitHub Dev Tracker for SoluLab
  * Tracks contributions across ALL repositories in an organization
- * FIXED: Now ranks by COMMITS (primary), NET LINES (tiebreaker)
+ * UPDATED: Now ranks by LINES ADDED (primary), NET LINES (tiebreaker)
  */
 
 const GitHubDevTracker = require('./GitHubDevTracker');
@@ -350,7 +350,7 @@ class MultiRepoTracker {
 
     /**
      * Create leaderboard from aggregated stats
-     * FIXED: Sorted by commits (primary), then net lines (tiebreaker)
+     * UPDATED: Sorted by additions (lines added) (primary), then net lines (tiebreaker)
      */
     createLeaderboard(stats, topN = null) {
         const leaderboard = [];
@@ -368,10 +368,10 @@ class MultiRepoTracker {
             });
         }
 
-        // Sort by commits (descending), then by net lines if commits are equal
+        // Sort by additions (lines added) (descending), then by net lines if additions are equal
         leaderboard.sort((a, b) => {
-            if (b.commits !== a.commits) {
-                return b.commits - a.commits;
+            if (b.additions !== a.additions) {
+                return b.additions - a.additions;
             }
             return b.netLines - a.netLines;
         });
@@ -416,13 +416,13 @@ class MultiRepoTracker {
         const leaderboard = this.createLeaderboard(stats, null);
 
         // Separate active and inactive contributors
-        const activeContributors = leaderboard.filter(dev => dev.commits > 0);
-        const inactiveContributors = leaderboard.filter(dev => dev.commits === 0);
+        const activeContributors = leaderboard.filter(dev => dev.additions > 0);
+        const inactiveContributors = leaderboard.filter(dev => dev.additions === 0);
 
         // Create table with Repositories column
         const table = new Table({
-            head: ['Rank', 'Username', 'Name', 'Repositories', 'Commits', 'Additions', 'Deletions', 'Net Lines'],
-            colWidths: [6, 18, 22, 35, 10, 12, 12, 12],
+            head: ['Rank', 'Username', 'Name', 'Repositories', 'Lines Added', 'Commits', 'Deletions', 'Net Lines'],
+            colWidths: [6, 18, 22, 35, 12, 10, 12, 12],
             wordWrap: true
         });
 
@@ -443,8 +443,8 @@ class MultiRepoTracker {
                 dev.username,
                 dev.name,
                 repoDisplay,
-                dev.commits,
                 `+${dev.additions}`,
+                dev.commits,
                 `-${dev.deletions}`,
                 dev.netLines
             ]);
@@ -453,7 +453,7 @@ class MultiRepoTracker {
         // Add separator if there are inactive contributors
         if (inactiveContributors.length > 0) {
             table.push([
-                { colSpan: 8, content: '--- Inactive Team Members (No commits in this period) ---', hAlign: 'center' }
+                { colSpan: 8, content: '--- Inactive Team Members (No lines added in this period) ---', hAlign: 'center' }
             ]);
 
             // Add inactive contributors
@@ -463,8 +463,8 @@ class MultiRepoTracker {
                     dev.username,
                     dev.name,
                     'No Activity',
-                    0,
                     '+0',
+                    0,
                     '-0',
                     0
                 ]);
@@ -476,6 +476,7 @@ class MultiRepoTracker {
         // Show top contributor details (if any active contributors)
         if (activeContributors.length > 0) {
             console.log(`\n🏆 Top Contributor: ${activeContributors[0].username}`);
+            console.log(`   Total Lines Added: +${activeContributors[0].additions}`);
             console.log(`   Total Commits: ${activeContributors[0].commits}`);
             console.log(`   Total Repositories: ${activeContributors[0].repoCount}`);
             console.log(`   Repositories: ${activeContributors[0].repositories.join(', ')}`);
@@ -502,11 +503,11 @@ class MultiRepoTracker {
         console.log(`Active Developers: ${activeDevs}`);
         console.log(`Inactive Developers: ${inactiveDevs}`);
         console.log(`Total Repositories with Activity: ${activeRepos.size}`);
-        console.log(`Total Commits: ${totalCommits}`);
         console.log(`Total Lines Added: +${totalAdditions}`);
+        console.log(`Total Commits: ${totalCommits}`);
         console.log(`Total Lines Deleted: -${totalDeletions}`);
         console.log(`Net Lines Changed: ${totalNet}`);
-        console.log(`Ranking: By Commits (primary), Net Lines (tiebreaker)`);
+        console.log(`Ranking: By Lines Added (primary), Net Lines (tiebreaker)`);
         console.log('-'.repeat(90) + '\n');
     }
 
@@ -519,8 +520,8 @@ class MultiRepoTracker {
         console.log('='.repeat(90) + '\n');
 
         const repoTable = new Table({
-            head: ['Repository', 'Developers', 'Commits', 'Additions', 'Deletions', 'Net Lines'],
-            colWidths: [30, 12, 10, 12, 12, 12]
+            head: ['Repository', 'Developers', 'Lines Added', 'Commits', 'Deletions', 'Net Lines'],
+            colWidths: [30, 12, 12, 10, 12, 12]
         });
 
         const repoSummary = [];
@@ -542,15 +543,15 @@ class MultiRepoTracker {
             });
         }
 
-        // Sort by commits (active repos first)
-        repoSummary.sort((a, b) => b.commits - a.commits);
+        // Sort by additions (lines added) (active repos first)
+        repoSummary.sort((a, b) => b.additions - a.additions);
 
         repoSummary.forEach(r => {
             repoTable.push([
                 r.repo,
                 r.devCount,
-                r.commits,
                 `+${r.additions}`,
+                r.commits,
                 `-${r.deletions}`,
                 r.netLines
             ]);
@@ -567,17 +568,17 @@ class MultiRepoTracker {
         console.log('Detailed Contributor Breakdown by Repository'.padStart(65));
         console.log('='.repeat(110) + '\n');
 
-        // Get repos with activity (sort by commits)
+        // Get repos with activity (sort by additions)
         const activeRepos = [];
         for (const [repo, stats] of Object.entries(statsByRepo)) {
-            const totalCommits = Object.values(stats).reduce((sum, s) => sum + s.commits, 0);
-            if (totalCommits > 0) {
-                activeRepos.push({ repo, stats, totalCommits });
+            const totalAdditions = Object.values(stats).reduce((sum, s) => sum + s.additions, 0);
+            if (totalAdditions > 0) {
+                activeRepos.push({ repo, stats, totalAdditions });
             }
         }
 
-        // Sort by total commits (descending)
-        activeRepos.sort((a, b) => b.totalCommits - a.totalCommits);
+        // Sort by total additions (descending)
+        activeRepos.sort((a, b) => b.totalAdditions - a.totalAdditions);
 
         // Show breakdown for each active repository
         activeRepos.forEach(({ repo, stats }, index) => {
@@ -585,11 +586,11 @@ class MultiRepoTracker {
             console.log('-'.repeat(110));
 
             const contributorTable = new Table({
-                head: ['Username', 'Name', 'Commits', 'Additions', 'Deletions', 'Net Lines'],
-                colWidths: [20, 25, 10, 15, 15, 15]
+                head: ['Username', 'Name', 'Lines Added', 'Commits', 'Deletions', 'Net Lines'],
+                colWidths: [20, 25, 15, 10, 15, 15]
             });
 
-            // Sort contributors by commits
+            // Sort contributors by additions (lines added)
             const contributors = Object.entries(stats)
                 .map(([username, data]) => ({
                     username,
@@ -599,14 +600,14 @@ class MultiRepoTracker {
                     deletions: data.deletions,
                     netLines: data.additions - data.deletions
                 }))
-                .sort((a, b) => b.commits - a.commits);
+                .sort((a, b) => b.additions - a.additions);
 
             contributors.forEach(c => {
                 contributorTable.push([
                     c.username,
                     c.name,
-                    c.commits,
                     `+${c.additions}`,
+                    c.commits,
                     `-${c.deletions}`,
                     c.netLines
                 ]);

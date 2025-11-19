@@ -7,6 +7,7 @@
  * - Auto-generates missing reports on startup (PARALLEL)
  * - 3-level caching: Memory (5min) → File (1hour) → GitHub API
  * - Smart user lookup: checks all period caches before API
+ * - User details endpoint with repository breakdown
  */
 
 const express = require('express');
@@ -292,6 +293,76 @@ app.get('/api/report/single/:period', async (req, res) => {
 });
 
 /**
+ * GET /api/user/:username/details
+ * New endpoint for detailed user view with repository breakdown
+ */
+app.get('/api/user/:username/details', async (req, res) => {
+    try {
+        const { username } = req.params;
+        const date = req.query.date ? new Date(req.query.date) : new Date();
+        const period = req.query.period || 'weekly';
+
+        const dateStr = date.toISOString().split('T')[0];
+        
+        console.log(`🔍 Fetching detailed stats for ${username} (${period})...`);
+        
+        // Get report data from file cache first
+        const reportData = await getReportFromFile('multi', period, date.toISOString());
+        
+        if (!reportData || !reportData.aggregated || !reportData.aggregated[username]) {
+            return res.status(404).json({ 
+                error: 'User not found',
+                message: `No data found for user: ${username}`
+            });
+        }
+        
+        const userData = reportData.aggregated[username];
+        const byRepo = reportData.byRepo || {};
+        
+        // Build repository breakdown for this user
+        const repoBreakdown = [];
+        
+        for (const [repoName, repoStats] of Object.entries(byRepo)) {
+            if (repoStats[username]) {
+                const userRepoStats = repoStats[username];
+                repoBreakdown.push({
+                    name: repoName,
+                    commits: userRepoStats.commits || 0,
+                    additions: userRepoStats.additions || 0,
+                    deletions: userRepoStats.deletions || 0,
+                    netLines: userRepoStats.netLines || (userRepoStats.additions - userRepoStats.deletions) || 0
+                });
+            }
+        }
+        
+        // Sort by additions (lines added)
+        repoBreakdown.sort((a, b) => b.additions - a.additions);
+        
+        const response = {
+            username,
+            name: userData.name || username,
+            email: userData.email || '',
+            period,
+            date: dateStr,
+            totalCommits: userData.commits || 0,
+            totalAdditions: userData.additions || 0,
+            totalDeletions: userData.deletions || 0,
+            totalNetLines: userData.netLines || 0,
+            repositoryCount: userData.repositories ? userData.repositories.length : repoBreakdown.length,
+            repositories: userData.repositories || repoBreakdown.map(r => r.name),
+            repoBreakdown,
+            generatedAt: new Date().toISOString()
+        };
+        
+        res.json(response);
+        
+    } catch (error) {
+        console.error('Error in /api/user/:username/details:', error);
+        res.status(500).json({ error: 'Failed to fetch user details', message: error.message });
+    }
+});
+
+/**
  * GET /api/user/:username
  * OPTIMIZED: Checks ALL period caches before hitting API
  */
@@ -498,9 +569,9 @@ app.get('/api/leaderboard/:period', async (req, res) => {
         const leaderboard = tracker.createLeaderboard(aggregated, null);
 
         const top = leaderboard.slice(0, topN);
-        const lowestCommits = leaderboard[leaderboard.length - 1]?.commits || 0;
+        const lowestAdditions = leaderboard[leaderboard.length - 1]?.additions || 0;
         const bottom = leaderboard
-            .filter(user => user.commits === lowestCommits || leaderboard.indexOf(user) >= leaderboard.length - bottomN)
+            .filter(user => user.additions === lowestAdditions || leaderboard.indexOf(user) >= leaderboard.length - bottomN)
             .reverse();
 
         res.json({
@@ -701,4 +772,4 @@ generateMissingReports().then(() => {
     });
 });
 
-module.exports = app;
+module.exports = app; 

@@ -149,11 +149,13 @@
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             border-radius: 10px;
             transition: all 0.3s;
+            cursor: pointer;
         }
 
         .user-item:hover {
             transform: translateX(5px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            background: linear-gradient(135deg, #e8ecf3 0%, #b8c5d9 100%);
         }
 
         .rank {
@@ -185,15 +187,15 @@
             font-size: 0.9em;
         }
 
-        .commits {
+        .lines-added {
             font-size: 1.3em;
             font-weight: 700;
-            color: #667eea;
-            min-width: 80px;
+            color: #28a745;
+            min-width: 100px;
             text-align: right;
         }
 
-        .commits-label {
+        .lines-label {
             font-size: 0.8em;
             color: #999;
         }
@@ -323,6 +325,151 @@
             margin-left: 8px;
         }
 
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 900px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .modal-header h2 {
+            color: #333;
+            font-size: 1.8em;
+        }
+
+        .modal-close {
+            background: #f0f0f0;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            padding: 5px 12px;
+            border-radius: 8px;
+            color: #666;
+        }
+
+        .modal-close:hover {
+            background: #e0e0e0;
+        }
+
+        .commit-summary {
+            margin-bottom: 25px;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .summary-stat {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .summary-stat-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .summary-stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .commit-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .commit-item {
+            display: flex;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .commit-item:hover {
+            background: #f0f2f5;
+        }
+
+        .commit-repo {
+            font-weight: 600;
+            color: #333;
+            min-width: 200px;
+        }
+
+        .commit-date {
+            color: #666;
+            font-size: 0.9em;
+            min-width: 120px;
+        }
+
+        .commit-stats {
+            display: flex;
+            gap: 15px;
+            margin-left: auto;
+        }
+
+        .commit-additions {
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .commit-deletions {
+            color: #dc3545;
+            font-weight: 600;
+        }
+
+        .commit-count {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .repo-breakdown-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -341,6 +488,20 @@
             .header h1 {
                 font-size: 1.8em;
             }
+
+            .modal {
+                width: 95%;
+                padding: 20px;
+            }
+
+            .commit-item {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .commit-stats {
+                margin-left: 0;
+            }
         }
     </style>
 </head>
@@ -349,7 +510,7 @@
         <!-- Header -->
         <div class="header">
             <h1>📊 GitHub SoluLab Analytics</h1>
-            <p>Real-time Developer Contribution Analytics</p>
+            <p>Real-time Developer Contribution Analytics - Ranked by Lines Added</p>
         </div>
 
         <!-- Controls -->
@@ -378,7 +539,7 @@
         <!-- Top & Bottom Contributors -->
         <div class="dashboard">
             <div class="card">
-                <h2>🏆 Top 10 Contributors</h2>
+                <h2>🏆 Top 10 Contributors (by Lines Added)</h2>
                 <div id="top-contributors" class="user-list">
                     <div class="loading">Loading top contributors</div>
                 </div>
@@ -394,7 +555,7 @@
 
         <!-- Inactive Users Section -->
         <div class="single-user-card" style="margin-bottom: 30px;">
-            <h2>⚠️ Inactive Users (0 Commits)</h2>
+            <h2>⚠️ Inactive Users (0 Lines Added)</h2>
             <div id="inactive-users" class="user-list" style="max-height: 400px; overflow-y: auto;">
                 <div class="loading">Loading inactive users</div>
             </div>
@@ -425,6 +586,19 @@
 
             <div id="user-stats" style="margin-top: 30px;">
                 <div class="no-data">Enter a username to view statistics</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Details Modal -->
+    <div class="modal-overlay" id="user-modal" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 id="modal-title">User Details</h2>
+                <button class="modal-close" onclick="closeUserModal()">×</button>
+            </div>
+            <div id="modal-content">
+                <div class="loading">Loading user details</div>
             </div>
         </div>
     </div>
@@ -506,15 +680,18 @@
         function displayTopContributors(data) {
             const container = document.getElementById('top-contributors');
             
+            // Sort by additions (lines added) instead of commits
             const users = Object.entries(data)
                 .map(([username, stats]) => ({
                     username,
                     name: stats.name,
                     commits: stats.commits,
+                    additions: stats.additions || 0,
+                    deletions: stats.deletions || 0,
                     repositories: stats.repositories || []
                 }))
-                .filter(user => user.commits > 0)
-                .sort((a, b) => b.commits - a.commits)
+                .filter(user => user.additions > 0)
+                .sort((a, b) => b.additions - a.additions)
                 .slice(0, 10);
 
             if (users.length === 0) {
@@ -547,15 +724,15 @@
                 }
 
                 return `
-                    <div class="user-item">
+                    <div class="user-item" onclick="showUserDetails('${user.username}')">
                         <div class="rank ${rankClass}">${rankEmoji}</div>
                         <div class="user-info">
                             <div class="user-name">${user.name}</div>
                             <div class="user-username">@${user.username}<span class="repos-indicator">${repoDisplay}</span></div>
                         </div>
-                        <div class="commits">
-                            ${user.commits}
-                            <div class="commits-label">commits</div>
+                        <div class="lines-added">
+                            +${user.additions.toLocaleString()}
+                            <div class="lines-label">lines added</div>
                         </div>
                     </div>
                 `;
@@ -565,15 +742,18 @@
         function displayBottomContributors(data) {
             const container = document.getElementById('bottom-contributors');
             
+            // Sort by additions (lines added) instead of commits
             let users = Object.entries(data)
                 .map(([username, stats]) => ({
                     username,
                     name: stats.name,
                     commits: stats.commits,
+                    additions: stats.additions || 0,
+                    deletions: stats.deletions || 0,
                     repositories: stats.repositories || []
                 }))
-                .filter(user => user.commits > 0)
-                .sort((a, b) => a.commits - b.commits)
+                .filter(user => user.additions > 0)
+                .sort((a, b) => a.additions - b.additions)
                 .slice(0, 10);
 
             if (users.length === 0) {
@@ -592,15 +772,15 @@
                 }
 
                 return `
-                    <div class="user-item">
+                    <div class="user-item" onclick="showUserDetails('${user.username}')">
                         <div class="rank">#${index + 1}</div>
                         <div class="user-info">
                             <div class="user-name">${user.name}</div>
                             <div class="user-username">@${user.username}<span class="repos-indicator">${repoDisplay}</span></div>
                         </div>
-                        <div class="commits">
-                            ${user.commits}
-                            <div class="commits-label">commits</div>
+                        <div class="lines-added">
+                            +${user.additions.toLocaleString()}
+                            <div class="lines-label">lines added</div>
                         </div>
                     </div>
                 `;
@@ -614,9 +794,9 @@
                 .map(([username, stats]) => ({
                     username,
                     name: stats.name,
-                    commits: stats.commits
+                    additions: stats.additions || 0
                 }))
-                .filter(user => user.commits === 0)
+                .filter(user => user.additions === 0)
                 .sort((a, b) => a.name.localeCompare(b.name));
 
             if (inactiveUsers.length === 0) {
@@ -626,23 +806,120 @@
 
             container.innerHTML = `
                 <div style="margin-bottom: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; color: #856404;">
-                    <strong>⚠️ ${inactiveUsers.length} inactive user${inactiveUsers.length > 1 ? 's' : ''}</strong> with 0 commits in this period
+                    <strong>⚠️ ${inactiveUsers.length} inactive user${inactiveUsers.length > 1 ? 's' : ''}</strong> with 0 lines added in this period
                 </div>
                 ${inactiveUsers.map((user, index) => `
-                    <div class="user-item" style="background: #f8f9fa;">
+                    <div class="user-item" style="background: #f8f9fa; cursor: default;">
                         <div class="rank" style="background: #dc3545; color: white; border-radius: 50%; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 0.9em;">${index + 1}</div>
                         <div class="user-info">
                             <div class="user-name">${user.name}</div>
                             <div class="user-username">@${user.username}</div>
                         </div>
-                        <div class="commits" style="color: #dc3545;">
+                        <div class="lines-added" style="color: #dc3545;">
                             0
-                            <div class="commits-label">commits</div>
+                            <div class="lines-label">lines added</div>
                         </div>
                     </div>
                 `).join('')}
             `;
         }
+
+        // Show user details modal
+        async function showUserDetails(username) {
+            const modal = document.getElementById('user-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalContent = document.getElementById('modal-content');
+            
+            modal.classList.add('active');
+            modalTitle.textContent = `Loading ${username}...`;
+            modalContent.innerHTML = '<div class="loading">Loading user details</div>';
+            
+            try {
+                const period = document.getElementById('period').value;
+                const date = document.getElementById('date').value;
+                
+                // Fetch detailed user data
+                const response = await fetch(`/api/user/${username}/details?date=${date}&period=${period}`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load user details');
+                }
+                
+                const userData = await response.json();
+                
+                modalTitle.textContent = `${userData.name} (@${userData.username})`;
+                
+                // Build modal content
+                let html = `
+                    <div class="commit-summary">
+                        <div class="summary-stats">
+                            <div class="summary-stat">
+                                <div class="summary-stat-value" style="color: #28a745;">+${(userData.totalAdditions || 0).toLocaleString()}</div>
+                                <div class="summary-stat-label">Lines Added</div>
+                            </div>
+                            <div class="summary-stat">
+                                <div class="summary-stat-value" style="color: #dc3545;">-${(userData.totalDeletions || 0).toLocaleString()}</div>
+                                <div class="summary-stat-label">Lines Deleted</div>
+                            </div>
+                            <div class="summary-stat">
+                                <div class="summary-stat-value">${userData.totalCommits || 0}</div>
+                                <div class="summary-stat-label">Total Commits</div>
+                            </div>
+                            <div class="summary-stat">
+                                <div class="summary-stat-value">${userData.repositoryCount || 0}</div>
+                                <div class="summary-stat-label">Repositories</div>
+                            </div>
+                        </div>
+                `;
+                
+                // Repository breakdown
+                if (userData.repoBreakdown && userData.repoBreakdown.length > 0) {
+                    html += `
+                        <div class="repo-breakdown-title">📁 Repository Breakdown</div>
+                        <div class="commit-list">
+                    `;
+                    
+                    userData.repoBreakdown.forEach(repo => {
+                        html += `
+                            <div class="commit-item">
+                                <div class="commit-repo">📁 ${repo.name}</div>
+                                <div class="commit-stats">
+                                    <span class="commit-count">${repo.commits} commits</span>
+                                    <span class="commit-additions">+${repo.additions.toLocaleString()}</span>
+                                    <span class="commit-deletions">-${repo.deletions.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+                
+                modalContent.innerHTML = html;
+                
+            } catch (error) {
+                modalContent.innerHTML = `<div class="error">❌ ${error.message}</div>`;
+            }
+        }
+
+        function closeUserModal() {
+            document.getElementById('user-modal').classList.remove('active');
+        }
+
+        function closeModal(event) {
+            if (event.target === event.currentTarget) {
+                closeUserModal();
+            }
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeUserModal();
+            }
+        });
 
         function handleUserSearch(event) {
             if (event.key === 'Enter') {
@@ -714,21 +991,22 @@
 
             let username = searchTerm;
             
-           if (currentData && currentData.aggregated) {
-    // First try EXACT case-sensitive match
-    let foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
-        u === searchTerm
-    );
-    
-    // If not found, try case-insensitive match
-    if (!foundUser) {
-        const searchLower = searchTerm.toLowerCase();
-        foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
-            u.toLowerCase() === searchLower
-        );
-    } 
+            if (currentData && currentData.aggregated) {
+                // First try EXACT case-sensitive match
+                let foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
+                    u === searchTerm
+                );
+                
+                // If not found, try case-insensitive match
+                if (!foundUser) {
+                    const searchLower = searchTerm.toLowerCase();
+                    foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
+                        u.toLowerCase() === searchLower
+                    );
+                }
 
                 if (!foundUser) {
+                    const searchLower = searchTerm.toLowerCase();
                     foundUser = Object.entries(currentData.aggregated).find(([u, stats]) => 
                         stats.name && stats.name.toLowerCase() === searchLower
                     );
@@ -791,10 +1069,10 @@
             if (period === 'all' || period === 'daily') {
                 statsHtml += `
                     <div class="stat-card">
-                        <div class="stat-label">Daily Commits</div>
-                        <div class="stat-value">${data.daily || 0}</div>
+                        <div class="stat-label">Daily Lines Added</div>
+                        <div class="stat-value" style="color: #90EE90;">+${data.dailyDetails?.additions || 0}</div>
                         <div class="stat-label" style="margin-top: 10px; font-size: 0.85em; opacity: 0.8;">
-                            ${data.dailyDetails?.additions || 0} additions, ${data.dailyDetails?.deletions || 0} deletions
+                            ${data.dailyDetails?.commits || 0} commits, -${data.dailyDetails?.deletions || 0} deleted
                         </div>
                         <div class="stat-label" style="margin-top: 5px; font-size: 0.8em; opacity: 0.7;">
                             📁 ${formatRepos(data.dailyDetails?.repositories)}
@@ -806,10 +1084,10 @@
             if (period === 'all' || period === 'weekly') {
                 statsHtml += `
                     <div class="stat-card">
-                        <div class="stat-label">Weekly Commits</div>
-                        <div class="stat-value">${data.weekly || 0}</div>
+                        <div class="stat-label">Weekly Lines Added</div>
+                        <div class="stat-value" style="color: #90EE90;">+${data.weeklyDetails?.additions || 0}</div>
                         <div class="stat-label" style="margin-top: 10px; font-size: 0.85em; opacity: 0.8;">
-                            ${data.weeklyDetails?.additions || 0} additions, ${data.weeklyDetails?.deletions || 0} deletions
+                            ${data.weeklyDetails?.commits || 0} commits, -${data.weeklyDetails?.deletions || 0} deleted
                         </div>
                         <div class="stat-label" style="margin-top: 5px; font-size: 0.8em; opacity: 0.7;">
                             📁 ${formatRepos(data.weeklyDetails?.repositories)}
@@ -821,10 +1099,10 @@
             if (period === 'all' || period === 'monthly') {
                 statsHtml += `
                     <div class="stat-card">
-                        <div class="stat-label">Monthly Commits</div>
-                        <div class="stat-value">${data.monthly || 0}</div>
+                        <div class="stat-label">Monthly Lines Added</div>
+                        <div class="stat-value" style="color: #90EE90;">+${data.monthlyDetails?.additions || 0}</div>
                         <div class="stat-label" style="margin-top: 10px; font-size: 0.85em; opacity: 0.8;">
-                            ${data.monthlyDetails?.additions || 0} additions, ${data.monthlyDetails?.deletions || 0} deletions
+                            ${data.monthlyDetails?.commits || 0} commits, -${data.monthlyDetails?.deletions || 0} deleted
                         </div>
                         <div class="stat-label" style="margin-top: 5px; font-size: 0.8em; opacity: 0.7;">
                             📁 ${formatRepos(data.monthlyDetails?.repositories)}
