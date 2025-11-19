@@ -102,7 +102,7 @@ async function generateMissingReports() {
         
         try {
             const stats = await fs.stat(filePath);
-            const ageMinutes = Math.round((Date.Now() - stats.mtimeMs) / 60000);
+            const ageMinutes = Math.round((Date.now() - stats.mtimeMs) / 60000);
             
             if (ageMinutes < 60) {
                 console.log(`  ✅ ${period}: Using existing report (${ageMinutes} min old)`);
